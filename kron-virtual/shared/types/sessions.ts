@@ -54,8 +54,10 @@ export interface RpSession {
 export interface RpSessionSummary extends RpSession {
   characterName: string;
   characterTagline: string;
+  characterAvatarUrl: string | null;
   personaName: string;
   personaTagline: string;
+  personaAvatarUrl: string | null;
   messageCount: number;
 }
 

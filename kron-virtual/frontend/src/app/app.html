@@ -44,6 +44,12 @@
         <span>🎛️</span>
         @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Styles</span> }
       </a>
+      <a routerLink="/studio" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>🎨</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Image Studio</span> }
+      </a>
     </div>
 
     <!-- Theme Selector pinned to bottom -->

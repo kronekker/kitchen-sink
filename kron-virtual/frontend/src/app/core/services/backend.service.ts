@@ -5,6 +5,7 @@ import {
   ActiveEngineStatus,
   ApiResponse,
   AppInfo,
+  AssignImageRequest,
   Character,
   ChatStreamEvent,
   ChatStreamRequest,
@@ -12,6 +13,12 @@ import {
   CreatePersonaRequest,
   CreateSessionRequest,
   CreateStyleRequest,
+  DraftImagePromptRequest,
+  DraftImagePromptResponse,
+  GeneratedImage,
+  GenerateImageRequest,
+  ImagePromptTemplate,
+  ImageTemplateKey,
   Persona,
   PromptPreview,
   RpMessage,
@@ -22,10 +29,12 @@ import {
   SuggestReplyRequest,
   SuggestStreamEvent,
   UpdateCharacterRequest,
+  UpdateImageTemplateRequest,
   UpdateMessageRequest,
   UpdatePersonaRequest,
   UpdateSessionRequest,
   UpdateStyleRequest,
+  WiroConfigStatus,
 } from '@shared/index';
 
 @Injectable({
@@ -133,6 +142,67 @@ export class BackendService {
   deleteMessage(id: number, truncateAfter = false): Observable<ApiResponse<void>> {
     const query = truncateAfter ? '?truncateAfter=true' : '';
     return this.http.delete<ApiResponse<void>>(`/api/messages/${id}${query}`);
+  }
+
+  // Image Generation & Studio (Wiro.ai Seedream 5.5)
+  getWiroStatus(): Observable<ApiResponse<WiroConfigStatus>> {
+    return this.http.get<ApiResponse<WiroConfigStatus>>('/api/images/status');
+  }
+
+  getImages(filters?: {
+    kind?: string;
+    entityType?: string;
+    entityId?: number;
+  }): Observable<ApiResponse<GeneratedImage[]>> {
+    const params = new URLSearchParams();
+    if (filters?.kind) params.set('kind', filters.kind);
+    if (filters?.entityType) params.set('entityType', filters.entityType);
+    if (filters?.entityId !== undefined) params.set('entityId', String(filters.entityId));
+    const qs = params.toString();
+    return this.http.get<ApiResponse<GeneratedImage[]>>(`/api/images${qs ? '?' + qs : ''}`);
+  }
+
+  generateImage(payload: GenerateImageRequest): Observable<ApiResponse<GeneratedImage>> {
+    return this.http.post<ApiResponse<GeneratedImage>>('/api/images/generate', payload);
+  }
+
+  setDefaultImage(id: number): Observable<ApiResponse<GeneratedImage>> {
+    return this.http.patch<ApiResponse<GeneratedImage>>(`/api/images/${id}/default`, {});
+  }
+
+  assignImage(id: number, payload: AssignImageRequest): Observable<ApiResponse<GeneratedImage>> {
+    return this.http.patch<ApiResponse<GeneratedImage>>(`/api/images/${id}/assign`, payload);
+  }
+
+  deleteImage(id: number): Observable<ApiResponse<void>> {
+    return this.http.delete<ApiResponse<void>>(`/api/images/${id}`);
+  }
+
+  getImageTemplates(): Observable<ApiResponse<ImagePromptTemplate[]>> {
+    return this.http.get<ApiResponse<ImagePromptTemplate[]>>('/api/images/templates');
+  }
+
+  updateImageTemplate(
+    key: ImageTemplateKey,
+    payload: UpdateImageTemplateRequest
+  ): Observable<ApiResponse<ImagePromptTemplate>> {
+    return this.http.put<ApiResponse<ImagePromptTemplate>>(`/api/images/templates/${key}`, payload);
+  }
+
+  resetImageTemplate(key: ImageTemplateKey): Observable<ApiResponse<ImagePromptTemplate>> {
+    return this.http.post<ApiResponse<ImagePromptTemplate>>(
+      `/api/images/templates/${key}/reset`,
+      {}
+    );
+  }
+
+  draftImagePrompt(
+    payload: DraftImagePromptRequest
+  ): Observable<ApiResponse<DraftImagePromptResponse>> {
+    return this.http.post<ApiResponse<DraftImagePromptResponse>>(
+      '/api/images/draft-prompt',
+      payload
+    );
   }
 
   // Streaming RP Chat Proxy (SSE over POST)

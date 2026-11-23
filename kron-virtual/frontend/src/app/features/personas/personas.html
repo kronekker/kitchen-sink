@@ -15,6 +15,9 @@
           [class.active]="editingId() === persona.id"
           (click)="selectForEdit(persona)"
         >
+          @if (persona.defaultAvatarUrl) {
+            <img class="card-avatar-thumb" [src]="persona.defaultAvatarUrl" [alt]="persona.name" />
+          }
           <div class="library-item-main">
             <div class="vb-flex vb-flex-center vb-gap-2">
               <span class="library-item-name">{{ persona.name }}</span>
@@ -124,6 +127,69 @@
         />
         <span>Set as default persona for new RP sessions</span>
       </label>
+
+      <!-- Persona Avatars Section -->
+      @if (editingId() !== null) {
+        <div class="avatar-section">
+          <div class="vb-flex vb-flex-between vb-flex-center vb-mb-2">
+            <h3 style="margin: 0; font-size: var(--text-md);">Persona Avatars</h3>
+            <button
+              class="vb-btn vb-btn-secondary"
+              style="padding: 0.25rem 0.6rem; font-size: 0.78rem;"
+              [disabled]="isDraftingAvatar()"
+              (click)="draftAvatarPrompt()"
+            >
+              Re-fill Prompt from Template
+            </button>
+          </div>
+
+          @if (avatars().length > 0) {
+            <div class="avatar-gallery vb-mb-3">
+              @for (img of avatars(); track img.id) {
+                <div class="avatar-tile" [class.is-default]="img.isDefault">
+                  <img [src]="img.url" [alt]="name()" (click)="previewAvatar.set(img)" />
+                  <div class="avatar-tile-actions">
+                    @if (img.isDefault) {
+                      <span class="default-tag">Default</span>
+                    } @else {
+                      <button class="tile-btn" (click)="setDefaultAvatar(img)">Set Default</button>
+                    }
+                    <button class="tile-btn danger" (click)="deleteAvatar(img, $event)">✕</button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <label class="vb-label">Avatar Generation Prompt (Text-to-Image via Wiro.ai)</label>
+          <textarea
+            class="vb-input editor-textarea vb-mb-2"
+            rows="3"
+            [value]="avatarPrompt()"
+            (input)="avatarPrompt.set($any($event.target).value)"
+          ></textarea>
+          <button
+            class="vb-btn vb-btn-primary"
+            style="padding: 0.4rem 0.85rem; font-size: var(--text-sm);"
+            [disabled]="isGeneratingAvatar() || !avatarPrompt().trim()"
+            (click)="generateAvatar()"
+          >
+            {{ isGeneratingAvatar() ? 'Generating Avatar (10–30s)...' : 'Generate Avatar' }}
+          </button>
+        </div>
+      }
     </div>
   </section>
 </div>
+
+@if (previewAvatar(); as img) {
+  <div class="avatar-modal-backdrop" (click)="previewAvatar.set(null)">
+    <div class="vb-card avatar-modal" (click)="$event.stopPropagation()">
+      <img [src]="img.url" [alt]="name()" />
+      <div class="vb-flex vb-flex-between vb-flex-center vb-mt-2">
+        <span style="font-size: 0.8rem; color: var(--color-text-muted);">{{ img.width }}×{{ img.height }}</span>
+        <button class="vb-btn vb-btn-secondary" (click)="previewAvatar.set(null)">Close</button>
+      </div>
+    </div>
+  </div>
+}

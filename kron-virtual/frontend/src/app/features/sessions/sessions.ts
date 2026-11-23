@@ -10,6 +10,7 @@ import {
 import {
   Character,
   ChatMetrics,
+  GeneratedImage,
   InferenceParams,
   Persona,
   PromptPreview,
@@ -96,6 +97,21 @@ export class Sessions implements OnInit {
   // System prompt modal state
   protected readonly modalSystemPrompt = signal<{ title: string; content: string } | null>(null);
   protected readonly copiedModalPrompt = signal<boolean>(false);
+
+  // Session & Combined Image Generation state
+  protected readonly sessionImages = signal<GeneratedImage[]>([]);
+  protected readonly charAvatars = signal<GeneratedImage[]>([]);
+  protected readonly personaAvatars = signal<GeneratedImage[]>([]);
+  protected readonly showSceneImageModal = signal<boolean>(false);
+  protected readonly sceneImageMode = signal<'session' | 'combined'>('session');
+  protected readonly selectedCharAvatarId = signal<number | null>(null);
+  protected readonly selectedPersonaAvatarId = signal<number | null>(null);
+  protected readonly sceneImagePrompt = signal<string>('');
+  protected readonly sceneImageSize = signal<string>('1024x1024');
+  protected readonly isDraftingScenePrompt = signal<boolean>(false);
+  protected readonly isGeneratingSceneImage = signal<boolean>(false);
+  protected readonly sceneImageError = signal<string | null>(null);
+  protected readonly lightboxImage = signal<GeneratedImage | null>(null);
 
   private activeAbortController: AbortController | null = null;
   private suggestAbortController: AbortController | null = null;
@@ -292,6 +308,135 @@ export class Sessions implements OnInit {
     this.liveMetrics.set(lastAssistant?.metrics ?? null);
     this.error.set(null);
     this.controlsSavedMsg.set(null);
+    this.loadSessionImages(session.id, character.id, persona.id);
+  }
+
+  private loadSessionImages(sessionId: number, characterId: number, personaId: number): void {
+    this.backendService.getImages({ entityType: 'session', entityId: sessionId }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) this.sessionImages.set(res.data);
+      },
+    });
+    this.backendService.getImages({ entityType: 'character', entityId: characterId }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.charAvatars.set(res.data);
+          const def = res.data.find((a) => a.isDefault) ?? res.data[0] ?? null;
+          this.selectedCharAvatarId.set(def?.id ?? null);
+        }
+      },
+    });
+    this.backendService.getImages({ entityType: 'persona', entityId: personaId }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.personaAvatars.set(res.data);
+          const def = res.data.find((a) => a.isDefault) ?? res.data[0] ?? null;
+          this.selectedPersonaAvatarId.set(def?.id ?? null);
+        }
+      },
+    });
+  }
+
+  openSceneImageModal(mode: 'session' | 'combined' = 'session'): void {
+    this.sceneImageMode.set(mode);
+    this.sceneImageError.set(null);
+    this.showSceneImageModal.set(true);
+    this.draftSceneImagePrompt(false);
+  }
+
+  switchSceneImageMode(mode: 'session' | 'combined'): void {
+    this.sceneImageMode.set(mode);
+    this.sceneImageError.set(null);
+    this.draftSceneImagePrompt(false);
+  }
+
+  draftSceneImagePrompt(useLlm: boolean): void {
+    const session = this.activeSession();
+    if (!session) return;
+    this.isDraftingScenePrompt.set(true);
+    this.sceneImageError.set(null);
+
+    const templateKey = this.sceneImageMode() === 'combined' ? 'combined_scene' : 'session_scene';
+    this.backendService
+      .draftImagePrompt({
+        templateKey,
+        sessionId: session.id,
+        useLlm,
+      })
+      .subscribe({
+        next: (res) => {
+          this.isDraftingScenePrompt.set(false);
+          if (res.success && res.data) {
+            this.sceneImagePrompt.set(res.data.prompt);
+          }
+        },
+        error: (err: any) => {
+          this.isDraftingScenePrompt.set(false);
+          this.sceneImageError.set(err?.error?.error || err?.message || 'Failed to draft prompt.');
+        },
+      });
+  }
+
+  generateSceneImage(): void {
+    const session = this.activeSession();
+    const prompt = this.sceneImagePrompt().trim();
+    if (!session || !prompt) return;
+
+    const mode = this.sceneImageMode();
+    const refIds: number[] = [];
+    const charAvId = this.selectedCharAvatarId();
+    const personaAvId = this.selectedPersonaAvatarId();
+
+    if (charAvId !== null) refIds.push(charAvId);
+    if (mode === 'combined' && personaAvId !== null) refIds.push(personaAvId);
+
+    const [wStr, hStr] = this.sceneImageSize().split('x');
+    const width = Number(wStr) || 1024;
+    const height = Number(hStr) || 1024;
+
+    this.isGeneratingSceneImage.set(true);
+    this.sceneImageError.set(null);
+
+    this.backendService
+      .generateImage({
+        kind: mode === 'combined' ? 'combined' : 'session',
+        entityType: 'session',
+        entityId: session.id,
+        prompt,
+        referenceImageIds: refIds,
+        width,
+        height,
+        outputFormat: 'jpeg',
+      })
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingSceneImage.set(false);
+          if (res.success && res.data) {
+            this.sessionImages.update((prev) => [res.data!, ...prev]);
+            this.showSceneImageModal.set(false);
+            this.lightboxImage.set(res.data);
+          } else {
+            this.sceneImageError.set(res.error || 'Image generation failed.');
+          }
+        },
+        error: (err: any) => {
+          this.isGeneratingSceneImage.set(false);
+          this.sceneImageError.set(err?.error?.error || err?.message || 'Image generation failed.');
+        },
+      });
+  }
+
+  deleteSessionImage(img: GeneratedImage, event?: Event): void {
+    event?.stopPropagation();
+    if (!confirm('Delete this scene image?')) return;
+    this.backendService.deleteImage(img.id).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.sessionImages.update((prev) => prev.filter((x) => x.id !== img.id));
+          if (this.lightboxImage()?.id === img.id) this.lightboxImage.set(null);
+        }
+      },
+    });
   }
 
   deleteSession(id: number, event: Event): void {

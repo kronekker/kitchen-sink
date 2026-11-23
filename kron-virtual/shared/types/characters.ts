@@ -8,6 +8,8 @@ export interface Character {
   scenario: string;
   firstMessage: string;
   exampleDialogue: string;
+  defaultAvatarUrl: string | null;
+  defaultAvatarId: number | null;
   createdAt: string;
   updatedAt: string;
 }

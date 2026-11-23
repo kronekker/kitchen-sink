@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
-import { Character } from '@shared/index';
+import { Character, GeneratedImage } from '@shared/index';
 import { BackendService } from '../../core/services/backend.service';
 
 @Component({
@@ -27,6 +27,13 @@ export class Characters implements OnInit {
   protected readonly firstMessage = signal<string>('');
   protected readonly exampleDialogue = signal<string>('');
 
+  // Avatar management
+  protected readonly avatars = signal<GeneratedImage[]>([]);
+  protected readonly avatarPrompt = signal<string>('');
+  protected readonly isGeneratingAvatar = signal<boolean>(false);
+  protected readonly isDraftingAvatar = signal<boolean>(false);
+  protected readonly previewAvatar = signal<GeneratedImage | null>(null);
+
   ngOnInit(): void {
     this.loadCharacters();
   }
@@ -52,6 +59,8 @@ export class Characters implements OnInit {
     this.scenario.set('');
     this.firstMessage.set('');
     this.exampleDialogue.set('');
+    this.avatars.set([]);
+    this.avatarPrompt.set('');
     this.error.set(null);
     this.statusMsg.set(null);
   }
@@ -68,6 +77,100 @@ export class Characters implements OnInit {
     this.exampleDialogue.set(char.exampleDialogue);
     this.error.set(null);
     this.statusMsg.set(null);
+    this.loadAvatars(char.id);
+    this.draftAvatarPrompt(char.id);
+  }
+
+  loadAvatars(characterId: number): void {
+    this.backendService.getImages({ entityType: 'character', entityId: characterId }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.avatars.set(res.data);
+        }
+      },
+    });
+  }
+
+  draftAvatarPrompt(characterId?: number): void {
+    const id = characterId ?? this.editingId();
+    if (!id) return;
+    this.isDraftingAvatar.set(true);
+    this.backendService
+      .draftImagePrompt({ templateKey: 'avatar_character', characterId: id })
+      .subscribe({
+        next: (res) => {
+          this.isDraftingAvatar.set(false);
+          if (res.success && res.data) {
+            this.avatarPrompt.set(res.data.prompt);
+          }
+        },
+        error: () => this.isDraftingAvatar.set(false),
+      });
+  }
+
+  generateAvatar(): void {
+    const id = this.editingId();
+    const prompt = this.avatarPrompt().trim();
+    if (!id || !prompt) return;
+
+    this.isGeneratingAvatar.set(true);
+    this.error.set(null);
+    this.statusMsg.set(null);
+
+    this.backendService
+      .generateImage({
+        kind: 'avatar',
+        entityType: 'character',
+        entityId: id,
+        prompt,
+        width: 1024,
+        height: 1024,
+        outputFormat: 'jpeg',
+        setAsDefault: this.avatars().length === 0,
+      })
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingAvatar.set(false);
+          if (res.success && res.data) {
+            this.statusMsg.set('Generated new character avatar.');
+            this.loadAvatars(id);
+            this.loadCharacters();
+          } else {
+            this.error.set(res.error || 'Failed to generate avatar.');
+          }
+        },
+        error: (err: any) => {
+          this.isGeneratingAvatar.set(false);
+          this.error.set(err?.error?.error || err?.message || 'Failed to generate avatar.');
+        },
+      });
+  }
+
+  setDefaultAvatar(img: GeneratedImage): void {
+    this.backendService.setDefaultImage(img.id).subscribe({
+      next: (res) => {
+        if (res.success) {
+          const id = this.editingId();
+          if (id) this.loadAvatars(id);
+          this.loadCharacters();
+        }
+      },
+    });
+  }
+
+  deleteAvatar(img: GeneratedImage, event: Event): void {
+    event.stopPropagation();
+    if (!confirm('Delete this avatar image?')) return;
+    this.backendService.deleteImage(img.id).subscribe({
+      next: (res) => {
+        if (res.success) {
+          const id = this.editingId();
+          if (id) this.loadAvatars(id);
+          this.loadCharacters();
+          if (this.previewAvatar()?.id === img.id) this.previewAvatar.set(null);
+        }
+      },
+    });
   }
 
   save(): void {

@@ -1,0 +1,392 @@
+<div class="studio-wrapper">
+  <!-- Studio Header & Tabs -->
+  <div class="vb-card studio-topbar">
+    <div class="vb-flex vb-gap-2">
+      <button
+        class="vb-btn"
+        [class.vb-btn-primary]="activeTab() === 'generate'"
+        [class.vb-btn-secondary]="activeTab() !== 'generate'"
+        (click)="activeTab.set('generate')"
+      >
+        Generate &amp; Remix
+      </button>
+      <button
+        class="vb-btn"
+        [class.vb-btn-primary]="activeTab() === 'gallery'"
+        [class.vb-btn-secondary]="activeTab() !== 'gallery'"
+        (click)="activeTab.set('gallery')"
+      >
+        Gallery ({{ allImages().length }})
+      </button>
+      <button
+        class="vb-btn"
+        [class.vb-btn-primary]="activeTab() === 'templates'"
+        [class.vb-btn-secondary]="activeTab() !== 'templates'"
+        (click)="activeTab.set('templates')"
+      >
+        Default Prompt Templates
+      </button>
+    </div>
+
+    @if (wiroStatus(); as ws) {
+      <div class="wiro-badge" [class.configured]="ws.configured">
+        <span class="wiro-dot" [class.ok]="ws.configured"></span>
+        <span>{{ ws.configured ? 'Wiro Ready · ' + ws.model : 'Wiro API Key Missing' }}</span>
+      </div>
+    }
+  </div>
+
+  @if (wiroStatus() && !wiroStatus()?.configured) {
+    <div class="vb-alert vb-alert-info">
+      {{ wiroStatus()?.message }}
+    </div>
+  }
+  @if (error()) {
+    <div class="vb-alert vb-alert-error">{{ error() }}</div>
+  }
+  @if (statusMsg()) {
+    <div class="vb-alert vb-alert-success">{{ statusMsg() }}</div>
+  }
+
+  <!-- TAB 1: GENERATE & REMIX -->
+  @if (activeTab() === 'generate') {
+    <div class="studio-gen-grid">
+      <div class="vb-card studio-panel">
+        <h2 style="margin: 0 0 0.25rem;">Image Playground (Text-to-Image &amp; Multi-Reference I2I)</h2>
+        <p style="margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm);">
+          Leave reference images empty for Text-to-Image, or pick 1–10 saved images below to edit/combine as <code>Image 1</code>, <code>Image 2</code>, etc.
+        </p>
+
+        <!-- Quick Template Fillers -->
+        <div class="quick-fill-bar">
+          <select
+            class="vb-input quick-select"
+            [value]="quickCharId() ?? ''"
+            (change)="quickCharId.set(+$any($event.target).value)"
+          >
+            @for (c of characters(); track c.id) {
+              <option [value]="c.id">Char: {{ c.name }}</option>
+            }
+          </select>
+          <select
+            class="vb-input quick-select"
+            [value]="quickPersonaId() ?? ''"
+            (change)="quickPersonaId.set(+$any($event.target).value)"
+          >
+            @for (p of personas(); track p.id) {
+              <option [value]="p.id">Persona: {{ p.name }}</option>
+            }
+          </select>
+          <button
+            class="vb-btn vb-btn-secondary small-btn"
+            [disabled]="isDrafting()"
+            (click)="draftFromTemplate('avatar_character', false)"
+          >
+            Fill Avatar
+          </button>
+          <button
+            class="vb-btn vb-btn-secondary small-btn"
+            [disabled]="isDrafting()"
+            (click)="draftFromTemplate('session_scene', false)"
+          >
+            Fill Scene
+          </button>
+          <button
+            class="vb-btn vb-btn-secondary small-btn"
+            [disabled]="isDrafting()"
+            (click)="draftFromTemplate('combined_scene', false)"
+          >
+            Fill Combined (2-Char)
+          </button>
+        </div>
+
+        <div class="vb-mb-3">
+          <label class="vb-label">Image Prompt *</label>
+          <textarea
+            class="vb-input studio-textarea"
+            rows="6"
+            placeholder="Describe the image to generate, or reference Image 1 / Image 2 when using reference images below..."
+            [value]="prompt()"
+            (input)="prompt.set($any($event.target).value)"
+          ></textarea>
+        </div>
+
+        <div class="options-row vb-mb-3">
+          <div>
+            <label class="vb-label">Dimensions</label>
+            <select
+              class="vb-input"
+              [value]="selectedSizeIdx()"
+              (change)="selectedSizeIdx.set(+$any($event.target).value)"
+            >
+              @for (sp of sizePresets; track $index) {
+                <option [value]="$index">{{ sp.label }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="vb-label">Format</label>
+            <select
+              class="vb-input"
+              [value]="outputFormat()"
+              (change)="outputFormat.set($any($event.target).value)"
+            >
+              <option value="jpeg">JPEG</option>
+              <option value="png">PNG</option>
+            </select>
+          </div>
+          <div>
+            <label class="vb-label">Background</label>
+            <select
+              class="vb-input"
+              [value]="backgroundMode()"
+              (change)="backgroundMode.set($any($event.target).value)"
+            >
+              <option value="auto">Auto</option>
+              <option value="opaque">Opaque</option>
+              <option value="transparent">Transparent (PNG)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Reference Images Picker -->
+        <div class="ref-picker-section vb-mb-3">
+          <div class="vb-flex vb-flex-between vb-flex-center vb-mb-2">
+            <label class="vb-label" style="margin: 0;">
+              Reference Images for I2I ({{ selectedRefIds().length }} / 10 selected)
+            </label>
+            @if (selectedRefIds().length > 0) {
+              <button class="vb-btn vb-btn-secondary small-btn" (click)="clearReferences()">
+                Clear Selection
+              </button>
+            }
+          </div>
+
+          @if (allImages().length === 0) {
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted); font-style: italic;">
+              Generate an avatar or studio image first to use it as an I2I reference.
+            </div>
+          } @else {
+            <div class="ref-thumb-grid">
+              @for (img of allImages(); track img.id) {
+                <div
+                  class="ref-thumb-card"
+                  [class.selected]="refOrderNumber(img.id) > 0"
+                  (click)="toggleReference(img.id)"
+                  [title]="img.prompt"
+                >
+                  <img [src]="img.url" [alt]="img.kind" />
+                  @if (refOrderNumber(img.id) > 0) {
+                    <span class="ref-order-badge">Image {{ refOrderNumber(img.id) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <button
+          class="vb-btn vb-btn-primary"
+          [disabled]="isGenerating() || !prompt().trim()"
+          (click)="generate()"
+        >
+          {{ isGenerating() ? 'Generating on Wiro.ai (this may take 10–30s)...' : (selectedRefIds().length > 0 ? 'Generate I2I (' + selectedRefIds().length + ' ref)' : 'Generate Image (T2I)') }}
+        </button>
+      </div>
+
+      <!-- Result Preview Panel -->
+      <div class="vb-card studio-panel">
+        <h3 style="margin: 0 0 var(--space-3);">Latest Result</h3>
+        @if (latestResult(); as res) {
+          <img class="result-image" [src]="res.url" alt="Generated image" (click)="lightboxImage.set(res)" />
+          <div class="result-meta">
+            <span>{{ res.width }}×{{ res.height }}</span>
+            <span>{{ res.outputFormat.toUpperCase() }}</span>
+            @if (res.elapsedSeconds) { <span>{{ res.elapsedSeconds }}s</span> }
+            @if (res.cost) { <span>${{ res.cost }}</span> }
+          </div>
+          <div class="vb-flex vb-gap-2 vb-mt-3" style="flex-wrap: wrap;">
+            <button class="vb-btn vb-btn-secondary small-btn" (click)="sendToRemix(res)">
+              Use as I2I Reference
+            </button>
+            <select
+              class="vb-input quick-select"
+              [value]="assignTarget()"
+              (change)="assignTarget.set($any($event.target).value)"
+            >
+              <option value="">Assign as Avatar...</option>
+              @for (c of characters(); track c.id) {
+                <option [value]="'character:' + c.id">Character: {{ c.name }}</option>
+              }
+              @for (p of personas(); track p.id) {
+                <option [value]="'persona:' + p.id">Persona: {{ p.name }}</option>
+              }
+            </select>
+            @if (assignTarget()) {
+              <button class="vb-btn vb-btn-primary small-btn" (click)="assignSelectedImage(res)">
+                Assign
+              </button>
+            }
+          </div>
+        } @else {
+          <div class="result-empty">
+            Your newly generated image will appear here.
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- TAB 2: GALLERY -->
+  @if (activeTab() === 'gallery') {
+    <div class="vb-card studio-panel">
+      <div class="vb-flex vb-flex-between vb-flex-center vb-mb-3" style="flex-wrap: wrap; gap: var(--space-2);">
+        <h2 style="margin: 0;">Generated Images Gallery</h2>
+        <div class="vb-flex vb-gap-2">
+          @for (f of ['all', 'avatar', 'session', 'combined', 'studio']; track f) {
+            <button
+              class="vb-btn small-btn"
+              [class.vb-btn-primary]="galleryFilter() === f"
+              [class.vb-btn-secondary]="galleryFilter() !== f"
+              (click)="galleryFilter.set(f)"
+            >
+              {{ f === 'all' ? 'All' : f }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="gallery-grid">
+        @for (img of filteredGallery(); track img.id) {
+          <div class="gallery-card" (click)="lightboxImage.set(img)">
+            <img [src]="img.url" [alt]="img.kind" />
+            <div class="gallery-card-footer">
+              <span class="kind-pill">{{ img.kind }}</span>
+              @if (img.isDefault) {
+                <span class="kind-pill default-pill">Default</span>
+              }
+              <button class="item-delete-btn" (click)="deleteImage(img, $event)" title="Delete">✕</button>
+            </div>
+          </div>
+        } @empty {
+          <div class="result-empty" style="grid-column: 1 / -1;">No generated images match this filter yet.</div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- TAB 3: PROMPT TEMPLATES -->
+  @if (activeTab() === 'templates') {
+    <div class="templates-grid">
+      <aside class="vb-card studio-panel">
+        <h3 style="margin: 0 0 var(--space-3);">System Prompt Templates</h3>
+        <div class="vb-flex-col vb-gap-2">
+          @for (tpl of templates(); track tpl.key) {
+            <button
+              class="vb-btn"
+              style="justify-content: flex-start; text-align: left;"
+              [class.vb-btn-primary]="selectedTemplateKey() === tpl.key"
+              [class.vb-btn-secondary]="selectedTemplateKey() !== tpl.key"
+              (click)="selectTemplate(tpl.key)"
+            >
+              {{ tpl.name }}
+            </button>
+          }
+        </div>
+      </aside>
+
+      <section class="vb-card studio-panel">
+        @if (activeTemplate(); as tpl) {
+          <div class="vb-flex vb-flex-between vb-flex-center vb-mb-3" style="flex-wrap: wrap; gap: var(--space-2);">
+            <div>
+              <h2 style="margin: 0;">{{ tpl.name }}</h2>
+              <p style="margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+                {{ tpl.description }}
+              </p>
+            </div>
+            <div class="vb-flex vb-gap-2">
+              <button class="vb-btn vb-btn-secondary small-btn" (click)="resetTemplate()">
+                Reset Default
+              </button>
+              <button
+                class="vb-btn vb-btn-primary small-btn"
+                [disabled]="isSavingTemplate()"
+                (click)="saveTemplate()"
+              >
+                {{ isSavingTemplate() ? 'Saving...' : 'Save Template' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="placeholder-hint vb-mb-3" ngNonBindable>
+            Placeholders: <code>{{char}}</code>, <code>{{char_description}}</code>, <code>{{char_personality}}</code>,
+            <code>{{char_anchors}}</code>, <code>{{user}}</code>, <code>{{user_description}}</code>,
+            <code>{{user_background}}</code>, <code>{{user_anchors}}</code>, <code>{{scene_context}}</code>
+          </div>
+
+          <textarea
+            class="vb-input studio-textarea"
+            rows="14"
+            [value]="templateDraft()"
+            (input)="templateDraft.set($any($event.target).value)"
+          ></textarea>
+        }
+      </section>
+    </div>
+  }
+</div>
+
+<!-- Lightbox Modal -->
+@if (lightboxImage(); as img) {
+  <div class="lightbox-backdrop" (click)="lightboxImage.set(null)">
+    <div class="vb-card lightbox-dialog" (click)="$event.stopPropagation()">
+      <div class="lightbox-img-col">
+        <img [src]="img.url" [alt]="img.kind" />
+      </div>
+      <div class="lightbox-info-col">
+        <div class="vb-flex vb-flex-between vb-flex-center">
+          <span class="kind-pill">{{ img.kind }} · {{ img.width }}×{{ img.height }}</span>
+          <button class="vb-btn vb-btn-secondary small-btn" (click)="lightboxImage.set(null)">Close</button>
+        </div>
+
+        <div class="lightbox-prompt">{{ img.prompt }}</div>
+
+        <div class="result-meta">
+          @if (img.elapsedSeconds) { <span>Time: {{ img.elapsedSeconds }}s</span> }
+          @if (img.cost) { <span>Cost: ${{ img.cost }}</span> }
+          @if (img.referenceImageIds.length > 0) { <span>I2I Refs: {{ img.referenceImageIds.length }}</span> }
+        </div>
+
+        <div class="vb-flex-col vb-gap-2" style="margin-top: auto;">
+          <button class="vb-btn vb-btn-primary small-btn" (click)="sendToRemix(img)">
+            Use as I2I Reference in Playground
+          </button>
+          <div class="vb-flex vb-gap-2">
+            <select
+              class="vb-input"
+              style="flex: 1;"
+              [value]="assignTarget()"
+              (change)="assignTarget.set($any($event.target).value)"
+            >
+              <option value="">Assign as Avatar...</option>
+              @for (c of characters(); track c.id) {
+                <option [value]="'character:' + c.id">Character: {{ c.name }}</option>
+              }
+              @for (p of personas(); track p.id) {
+                <option [value]="'persona:' + p.id">Persona: {{ p.name }}</option>
+              }
+            </select>
+            @if (assignTarget()) {
+              <button class="vb-btn vb-btn-secondary small-btn" (click)="assignSelectedImage(img)">
+                Assign
+              </button>
+            }
+          </div>
+          <button class="vb-btn vb-btn-secondary small-btn" (click)="deleteImage(img)">
+            Delete Image
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+}

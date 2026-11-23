@@ -5,6 +5,8 @@ export interface Persona {
   description: string;
   background: string;
   isDefault: boolean;
+  defaultAvatarUrl: string | null;
+  defaultAvatarId: number | null;
   createdAt: string;
   updatedAt: string;
 }

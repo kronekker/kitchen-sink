@@ -1,5 +1,5 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
-import { Persona } from '@shared/index';
+import { GeneratedImage, Persona } from '@shared/index';
 import { BackendService } from '../../core/services/backend.service';
 
 @Component({
@@ -24,6 +24,13 @@ export class Personas implements OnInit {
   protected readonly background = signal<string>('');
   protected readonly isDefault = signal<boolean>(false);
 
+  // Avatar management
+  protected readonly avatars = signal<GeneratedImage[]>([]);
+  protected readonly avatarPrompt = signal<string>('');
+  protected readonly isGeneratingAvatar = signal<boolean>(false);
+  protected readonly isDraftingAvatar = signal<boolean>(false);
+  protected readonly previewAvatar = signal<GeneratedImage | null>(null);
+
   ngOnInit(): void {
     this.loadPersonas();
   }
@@ -46,6 +53,8 @@ export class Personas implements OnInit {
     this.description.set('');
     this.background.set('');
     this.isDefault.set(false);
+    this.avatars.set([]);
+    this.avatarPrompt.set('');
     this.error.set(null);
     this.statusMsg.set(null);
   }
@@ -59,6 +68,96 @@ export class Personas implements OnInit {
     this.isDefault.set(persona.isDefault);
     this.error.set(null);
     this.statusMsg.set(null);
+    this.loadAvatars(persona.id);
+    this.draftAvatarPrompt(persona.id);
+  }
+
+  loadAvatars(personaId: number): void {
+    this.backendService.getImages({ entityType: 'persona', entityId: personaId }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) this.avatars.set(res.data);
+      },
+    });
+  }
+
+  draftAvatarPrompt(personaId?: number): void {
+    const id = personaId ?? this.editingId();
+    if (!id) return;
+    this.isDraftingAvatar.set(true);
+    this.backendService
+      .draftImagePrompt({ templateKey: 'avatar_persona', personaId: id })
+      .subscribe({
+        next: (res) => {
+          this.isDraftingAvatar.set(false);
+          if (res.success && res.data) this.avatarPrompt.set(res.data.prompt);
+        },
+        error: () => this.isDraftingAvatar.set(false),
+      });
+  }
+
+  generateAvatar(): void {
+    const id = this.editingId();
+    const prompt = this.avatarPrompt().trim();
+    if (!id || !prompt) return;
+
+    this.isGeneratingAvatar.set(true);
+    this.error.set(null);
+    this.statusMsg.set(null);
+
+    this.backendService
+      .generateImage({
+        kind: 'avatar',
+        entityType: 'persona',
+        entityId: id,
+        prompt,
+        width: 1024,
+        height: 1024,
+        outputFormat: 'jpeg',
+        setAsDefault: this.avatars().length === 0,
+      })
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingAvatar.set(false);
+          if (res.success && res.data) {
+            this.statusMsg.set('Generated new persona avatar.');
+            this.loadAvatars(id);
+            this.loadPersonas();
+          } else {
+            this.error.set(res.error || 'Failed to generate avatar.');
+          }
+        },
+        error: (err: any) => {
+          this.isGeneratingAvatar.set(false);
+          this.error.set(err?.error?.error || err?.message || 'Failed to generate avatar.');
+        },
+      });
+  }
+
+  setDefaultAvatar(img: GeneratedImage): void {
+    this.backendService.setDefaultImage(img.id).subscribe({
+      next: (res) => {
+        if (res.success) {
+          const id = this.editingId();
+          if (id) this.loadAvatars(id);
+          this.loadPersonas();
+        }
+      },
+    });
+  }
+
+  deleteAvatar(img: GeneratedImage, event: Event): void {
+    event.stopPropagation();
+    if (!confirm('Delete this avatar image?')) return;
+    this.backendService.deleteImage(img.id).subscribe({
+      next: (res) => {
+        if (res.success) {
+          const id = this.editingId();
+          if (id) this.loadAvatars(id);
+          this.loadPersonas();
+          if (this.previewAvatar()?.id === img.id) this.previewAvatar.set(null);
+        }
+      },
+    });
   }
 
   save(): void {

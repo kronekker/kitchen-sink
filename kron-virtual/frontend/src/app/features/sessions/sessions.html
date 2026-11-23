@@ -12,6 +12,9 @@
           [class.active]="activeSession()?.id === s.id && !showNewSessionForm()"
           (click)="selectSession(s.id)"
         >
+          @if (s.characterAvatarUrl) {
+            <img class="session-list-avatar" [src]="s.characterAvatarUrl" [alt]="s.characterName" />
+          }
           <div class="session-item-meta">
             <div class="session-title">{{ s.title }}</div>
             <div
@@ -132,10 +135,24 @@
       <!-- Toolbar -->
       <div class="rp-toolbar">
         <div class="rp-pairing-badge" [title]="activePairingTooltip()">
+          @if (activeCharacter()?.defaultAvatarUrl; as cUrl) {
+            <img class="tiny-avatar" [src]="cUrl" [alt]="activeCharacter()?.name" />
+          }
           <strong>{{ activeCharacter()?.name }}</strong>
           <span class="pairing-sep">×</span>
+          @if (activePersona()?.defaultAvatarUrl; as pUrl) {
+            <img class="tiny-avatar" [src]="pUrl" [alt]="activePersona()?.name" />
+          }
           <span>{{ activePersona()?.name }}</span>
         </div>
+
+        <button
+          class="vb-btn vb-btn-secondary toolbar-btn"
+          (click)="openSceneImageModal('session')"
+          title="Generate a Character or Combined Scene image via Wiro.ai"
+        >
+          🖼️ Scene Image{{ sessionImages().length ? ' (' + sessionImages().length + ')' : '' }}
+        </button>
 
         <button
           class="vb-btn vb-btn-secondary toolbar-btn"
@@ -387,12 +404,29 @@
         </div>
       }
 
+      <!-- Session Generated Images Strip -->
+      @if (sessionImages().length > 0) {
+        <div class="session-gallery-strip">
+          @for (img of sessionImages(); track img.id) {
+            <div class="strip-thumb" (click)="lightboxImage.set(img)" [title]="img.prompt">
+              <img [src]="img.url" [alt]="img.kind" />
+              <span class="strip-badge">{{ img.kind === 'combined' ? '2-Char' : 'Scene' }}</span>
+            </div>
+          }
+        </div>
+      }
+
       <!-- RP Transcript -->
       <div class="rp-transcript" #transcriptContainer>
         @for (msg of messages(); track msg.id) {
           <div class="message-bubble" [class.role-user]="msg.role === 'user'" [class.role-assistant]="msg.role === 'assistant'">
             <div class="message-header">
               <span class="message-role">
+                @if (msg.role === 'user' && activePersona()?.defaultAvatarUrl) {
+                  <img class="msg-avatar" [src]="activePersona()?.defaultAvatarUrl" [alt]="activePersona()?.name" />
+                } @else if (msg.role === 'assistant' && activeCharacter()?.defaultAvatarUrl) {
+                  <img class="msg-avatar" [src]="activeCharacter()?.defaultAvatarUrl" [alt]="activeCharacter()?.name" />
+                }
                 {{ msg.role === 'user' ? (activePersona()?.name || 'You') : (activeCharacter()?.name || 'Character') }}
               </span>
               <div class="message-actions">
@@ -578,6 +612,162 @@
         </div>
       </div>
       <pre class="modal-prompt-body">{{ modal.content }}</pre>
+    </div>
+  </div>
+}
+
+<!-- Scene / Combined Image Generation Modal -->
+@if (showSceneImageModal()) {
+  <div class="modal-backdrop" (click)="showSceneImageModal.set(false)">
+    <div class="vb-card modal-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0;">Generate Session Scene Image (Wiro.ai)</h3>
+          <span style="font-size: 0.78rem; color: var(--color-text-muted);">
+            Image-to-Image referencing saved character/persona avatars to preserve identity
+          </span>
+        </div>
+        <button class="vb-btn vb-btn-secondary toolbar-btn" (click)="showSceneImageModal.set(false)">
+          Close
+        </button>
+      </div>
+
+      @if (sceneImageError()) {
+        <div class="vb-alert vb-alert-error">{{ sceneImageError() }}</div>
+      }
+
+      <div class="vb-flex vb-gap-2" style="flex-wrap: wrap;">
+        <button
+          class="vb-btn toolbar-btn"
+          [class.vb-btn-primary]="sceneImageMode() === 'session'"
+          [class.vb-btn-secondary]="sceneImageMode() !== 'session'"
+          (click)="switchSceneImageMode('session')"
+        >
+          Character in Scene (1 Ref)
+        </button>
+        <button
+          class="vb-btn toolbar-btn"
+          [class.vb-btn-primary]="sceneImageMode() === 'combined'"
+          [class.vb-btn-secondary]="sceneImageMode() !== 'combined'"
+          (click)="switchSceneImageMode('combined')"
+        >
+          Combined: Character + Persona (2 Refs)
+        </button>
+      </div>
+
+      <div class="vb-grid vb-grid-cols-2">
+        <div>
+          <label class="vb-label">Image 1 — {{ activeCharacter()?.name }} Avatar</label>
+          @if (charAvatars().length > 0) {
+            <select
+              class="vb-input"
+              [value]="selectedCharAvatarId() ?? ''"
+              (change)="selectedCharAvatarId.set(+$any($event.target).value)"
+            >
+              @for (av of charAvatars(); track av.id) {
+                <option [value]="av.id">Avatar #{{ av.id }}{{ av.isDefault ? ' (Default)' : '' }}</option>
+              }
+            </select>
+          } @else {
+            <div style="font-size: 0.78rem; color: var(--color-text-muted);">
+              No avatar generated for {{ activeCharacter()?.name }} yet (will run Text-to-Image).
+            </div>
+          }
+        </div>
+
+        @if (sceneImageMode() === 'combined') {
+          <div>
+            <label class="vb-label">Image 2 — {{ activePersona()?.name }} Avatar</label>
+            @if (personaAvatars().length > 0) {
+              <select
+                class="vb-input"
+                [value]="selectedPersonaAvatarId() ?? ''"
+                (change)="selectedPersonaAvatarId.set(+$any($event.target).value)"
+              >
+                @for (av of personaAvatars(); track av.id) {
+                  <option [value]="av.id">Avatar #{{ av.id }}{{ av.isDefault ? ' (Default)' : '' }}</option>
+                }
+              </select>
+            } @else {
+              <div style="font-size: 0.78rem; color: var(--color-text-muted);">
+                No avatar generated for {{ activePersona()?.name }} yet.
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="vb-flex vb-flex-between vb-flex-center" style="flex-wrap: wrap; gap: var(--space-2);">
+        <label class="vb-label" style="margin: 0;">Visual Scene Prompt</label>
+        <div class="vb-flex vb-gap-2">
+          <button
+            class="vb-btn vb-btn-secondary toolbar-btn"
+            [disabled]="isDraftingScenePrompt()"
+            (click)="draftSceneImagePrompt(false)"
+          >
+            Fill Template
+          </button>
+          <button
+            class="vb-btn vb-btn-secondary toolbar-btn"
+            [disabled]="isDraftingScenePrompt()"
+            (click)="draftSceneImagePrompt(true)"
+          >
+            {{ isDraftingScenePrompt() ? 'Drafting...' : '✨ Refine with Local LLM' }}
+          </button>
+        </div>
+      </div>
+
+      <textarea
+        class="vb-input"
+        rows="8"
+        [value]="sceneImagePrompt()"
+        (input)="sceneImagePrompt.set($any($event.target).value)"
+      ></textarea>
+
+      <div class="vb-flex vb-flex-between vb-flex-center" style="flex-wrap: wrap; gap: var(--space-2);">
+        <select
+          class="vb-input"
+          style="width: auto;"
+          [value]="sceneImageSize()"
+          (change)="sceneImageSize.set($any($event.target).value)"
+        >
+          <option value="1024x1024">1024 × 1024 (Square)</option>
+          <option value="1024x1280">1024 × 1280 (Portrait)</option>
+          <option value="1280x1024">1280 × 1024 (Landscape)</option>
+          <option value="1344x768">1344 × 768 (16:9 Wide)</option>
+        </select>
+
+        <button
+          class="vb-btn vb-btn-primary"
+          [disabled]="isGeneratingSceneImage() || !sceneImagePrompt().trim()"
+          (click)="generateSceneImage()"
+        >
+          {{ isGeneratingSceneImage() ? 'Generating on Wiro.ai (10–30s)...' : 'Generate Scene Image' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Session Image Lightbox -->
+@if (lightboxImage(); as img) {
+  <div class="modal-backdrop" (click)="lightboxImage.set(null)">
+    <div class="vb-card modal-dialog" style="width: min(860px, 94vw);" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0;">{{ img.kind === 'combined' ? 'Combined Scene' : 'Session Scene' }} ({{ img.width }}×{{ img.height }})</h3>
+          <span style="font-size: 0.78rem; color: var(--color-text-muted);">
+            @if (img.elapsedSeconds) { {{ img.elapsedSeconds }}s }
+            @if (img.cost) { · ${{ img.cost }} }
+          </span>
+        </div>
+        <div class="vb-flex vb-gap-2">
+          <button class="vb-btn vb-btn-secondary toolbar-btn" (click)="deleteSessionImage(img)">Delete</button>
+          <button class="vb-btn vb-btn-primary toolbar-btn" (click)="lightboxImage.set(null)">Close</button>
+        </div>
+      </div>
+      <img class="lightbox-full-img" [src]="img.url" [alt]="img.kind" />
+      <pre class="modal-prompt-body" style="max-height: 150px;">{{ img.prompt }}</pre>
     </div>
   </div>
 }

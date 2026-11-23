@@ -7,6 +7,7 @@ import stylesRouter from './styles';
 import sessionsRouter from './sessions';
 import messagesRouter from './messages';
 import chatStreamRouter from './chat-stream';
+import imagesRouter from './images';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/styles', stylesRouter);
 router.use('/sessions', sessionsRouter);
 router.use('/messages', messagesRouter);
 router.use('/chat', chatStreamRouter);
+router.use('/images', imagesRouter);
 
 export default router;

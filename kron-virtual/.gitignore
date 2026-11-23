@@ -14,6 +14,7 @@ dist/
 *.db-shm
 *.db-wal
 /backend/dev.db
+/backend/data/images/
 
 # Environment configuration
 .env

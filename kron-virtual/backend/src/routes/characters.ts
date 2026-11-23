@@ -3,10 +3,14 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { characters } from '../db/schema';
 import { ApiResponse, Character, CreateCharacterRequest, UpdateCharacterRequest } from '@shared/index';
+import { getDefaultAvatarMap } from './images';
 
 const router = Router();
 
-export function toCharacterDto(row: typeof characters.$inferSelect): Character {
+export function toCharacterDto(
+  row: typeof characters.$inferSelect,
+  avatar?: { id: number; url: string } | null
+): Character {
   return {
     id: row.id,
     name: row.name,
@@ -17,6 +21,8 @@ export function toCharacterDto(row: typeof characters.$inferSelect): Character {
     scenario: row.scenario,
     firstMessage: row.firstMessage,
     exampleDialogue: row.exampleDialogue,
+    defaultAvatarUrl: avatar?.url ?? null,
+    defaultAvatarId: avatar?.id ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -25,9 +31,10 @@ export function toCharacterDto(row: typeof characters.$inferSelect): Character {
 // GET /api/characters
 router.get('/', (_req: Request, res: Response) => {
   const rows = db.select().from(characters).orderBy(desc(characters.updatedAt)).all();
+  const avatars = getDefaultAvatarMap('character');
   const response: ApiResponse<Character[]> = {
     success: true,
-    data: rows.map(toCharacterDto),
+    data: rows.map((r) => toCharacterDto(r, avatars.get(r.id) ?? null)),
   };
   res.json(response);
 });
@@ -44,9 +51,10 @@ router.get('/:id', (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Character not found.' });
     return;
   }
+  const avatars = getDefaultAvatarMap('character');
   const response: ApiResponse<Character> = {
     success: true,
-    data: toCharacterDto(row),
+    data: toCharacterDto(row, avatars.get(row.id) ?? null),
   };
   res.json(response);
 });

@@ -3,10 +3,14 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { personas } from '../db/schema';
 import { ApiResponse, CreatePersonaRequest, Persona, UpdatePersonaRequest } from '@shared/index';
+import { getDefaultAvatarMap } from './images';
 
 const router = Router();
 
-export function toPersonaDto(row: typeof personas.$inferSelect): Persona {
+export function toPersonaDto(
+  row: typeof personas.$inferSelect,
+  avatar?: { id: number; url: string } | null
+): Persona {
   return {
     id: row.id,
     name: row.name,
@@ -14,6 +18,8 @@ export function toPersonaDto(row: typeof personas.$inferSelect): Persona {
     description: row.description,
     background: row.background,
     isDefault: row.isDefault === 1,
+    defaultAvatarUrl: avatar?.url ?? null,
+    defaultAvatarId: avatar?.id ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -26,9 +32,10 @@ router.get('/', (_req: Request, res: Response) => {
     .from(personas)
     .orderBy(desc(personas.isDefault), desc(personas.updatedAt))
     .all();
+  const avatars = getDefaultAvatarMap('persona');
   const response: ApiResponse<Persona[]> = {
     success: true,
-    data: rows.map(toPersonaDto),
+    data: rows.map((r) => toPersonaDto(r, avatars.get(r.id) ?? null)),
   };
   res.json(response);
 });
@@ -45,9 +52,10 @@ router.get('/:id', (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Persona not found.' });
     return;
   }
+  const avatars = getDefaultAvatarMap('persona');
   const response: ApiResponse<Persona> = {
     success: true,
-    data: toPersonaDto(row),
+    data: toPersonaDto(row, avatars.get(row.id) ?? null),
   };
   res.json(response);
 });

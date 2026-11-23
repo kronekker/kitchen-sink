@@ -1,6 +1,6 @@
-import { InferenceParams } from '@shared/index';
+import { ImageTemplateKey, InferenceParams } from '@shared/index';
 import { db, sqlite } from './index';
-import { characters, personas, rpStyles } from './schema';
+import { characters, imagePromptTemplates, personas, rpStyles } from './schema';
 
 export const DEFAULT_RP_DIRECTIVES =
   'Write in first-person limited, present tense. Stay strictly in character as {{char}}. ' +
@@ -16,6 +16,65 @@ export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
   temperature: 0.85,
   top_p: 0.95,
   min_p: 0.05,
+};
+
+export const DEFAULT_IMAGE_TEMPLATES: Record<
+  ImageTemplateKey,
+  { name: string; description: string; template: string }
+> = {
+  avatar_character: {
+    name: 'Character Avatar (Text-to-Image)',
+    description:
+      'Used when generating portrait avatars for a Character from their description and personality.',
+    template:
+      'High-detail cinematic portrait photograph of {{char}}. {{char_description}} ' +
+      'Natural expression reflecting their personality: {{char_personality}}. ' +
+      'Head-and-shoulders framing at eye level, soft directional lighting, shallow depth of field, sharp facial details, 35mm lens look, no text or watermark.',
+  },
+  avatar_persona: {
+    name: 'Persona Avatar (Text-to-Image)',
+    description:
+      'Used when generating portrait avatars for a User Persona from their description and background.',
+    template:
+      'High-detail cinematic portrait photograph of {{user}}. {{user_description}} ' +
+      'Subtle environmental cues hinting at their background: {{user_background}}. ' +
+      'Head-and-shoulders framing at eye level, natural directional lighting, shallow depth of field, sharp facial details, 35mm lens look, no text or watermark.',
+  },
+  session_scene: {
+    name: 'Session Scene — Character (Image-to-Image)',
+    description:
+      'Used in RP sessions to place the Character (Image 1) into the current scene while preserving their exact face and features.',
+    template: `[TASK & COMPOSITION]
+Create a candid 35mm cinematic photograph featuring {{char}} from Image 1 in the current scene. Medium shot at eye level with natural environmental depth.
+
+[CHARACTER - IMAGE 1]
+Preserve the exact facial features, hair, and build of {{char}} from Image 1 ({{char_anchors}}). Dress and pose {{char}} to match the current moment.
+
+[SCENE & ACTION]
+{{scene_context}}
+
+[LIGHTING & CONSTRAINTS]
+Natural, unified atmospheric lighting matching the setting. Keep {{char}}'s face clearly recognizable from Image 1. No text, captions, or watermarks.`,
+  },
+  combined_scene: {
+    name: 'Combined Scene — Character + Persona (Image-to-Image)',
+    description:
+      'Multi-character template using Character (Image 1) and Persona (Image 2) with explicit identity anchors to prevent identity blending.',
+    template: `[TASK & COMPOSITION]
+Create a candid 35mm cinematic photograph featuring the two characters from Image 1 and Image 2 together in the scene. {{char}} (Image 1) is on the left and {{user}} (Image 2) is on the right, captured in a medium shot at eye level.
+
+[CHARACTER 1 - IMAGE 1 ({{char}})]
+Preserve the exact facial features, hair, and build of the person in Image 1 ({{char_anchors}}). Outfit, pose, and expression match their role in the scene.
+
+[CHARACTER 2 - IMAGE 2 ({{user}})]
+Preserve the exact facial features, hair, and build of the person in Image 2 ({{user_anchors}}). Outfit, pose, and expression match their role in the scene.
+
+[INTERACTION & SCENE]
+{{scene_context}}
+
+[LIGHTING & CONSTRAINTS]
+One unified light source hitting both subjects so they share the same space naturally. Keep both faces clearly recognizable from their respective reference images without blending their features. No text or watermarks.`,
+  },
 };
 
 export function initializeDatabase(): void {
@@ -90,6 +149,36 @@ export function initializeDatabase(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_rp_messages_session_id ON rp_messages(session_id);
+
+    CREATE TABLE IF NOT EXISTS generated_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      filename TEXT NOT NULL,
+      remote_url TEXT,
+      prompt TEXT NOT NULL,
+      reference_image_ids_json TEXT NOT NULL DEFAULT '[]',
+      width INTEGER NOT NULL DEFAULT 1024,
+      height INTEGER NOT NULL DEFAULT 1024,
+      output_format TEXT NOT NULL DEFAULT 'jpeg',
+      wiro_task_id TEXT,
+      elapsed_seconds TEXT,
+      cost TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_generated_images_entity ON generated_images(entity_type, entity_id);
+
+    CREATE TABLE IF NOT EXISTS image_prompt_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      template TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Safe additive migrations for existing SQLite databases
@@ -266,6 +355,26 @@ export function initializeDatabase(): void {
           paramsJson: JSON.stringify(s.params),
           isDefault: s.isDefault,
           createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+  }
+
+  const existingTemplates = db
+    .select({ key: imagePromptTemplates.key })
+    .from(imagePromptTemplates)
+    .all();
+  const existingKeys = new Set(existingTemplates.map((t) => t.key));
+
+  for (const [key, def] of Object.entries(DEFAULT_IMAGE_TEMPLATES)) {
+    if (!existingKeys.has(key)) {
+      db.insert(imagePromptTemplates)
+        .values({
+          key,
+          name: def.name,
+          description: def.description,
+          template: def.template,
           updatedAt: now,
         })
         .run();

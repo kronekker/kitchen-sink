@@ -17,6 +17,7 @@ import {
 } from '@shared/index';
 import { toCharacterDto } from './characters';
 import { toPersonaDto } from './personas';
+import { getDefaultAvatarMap } from './images';
 import { assemblePrompt, replacePlaceholders } from '../services/prompt-assembler';
 
 const router = Router();
@@ -80,6 +81,8 @@ router.get('/', (_req: Request, res: Response) => {
   const charMap = new Map(charRows.map((c) => [c.id, c]));
   const personaMap = new Map(personaRows.map((p) => [p.id, p]));
   const countMap = new Map(counts.map((c) => [c.sessionId, Number(c.count)]));
+  const charAvatars = getDefaultAvatarMap('character');
+  const personaAvatars = getDefaultAvatarMap('persona');
 
   const summaries: RpSessionSummary[] = rows.map((row) => {
     const ch = charMap.get(row.characterId);
@@ -88,8 +91,10 @@ router.get('/', (_req: Request, res: Response) => {
       ...toSessionDto(row),
       characterName: ch?.name ?? 'Unknown Character',
       characterTagline: ch?.tagline ?? '',
+      characterAvatarUrl: charAvatars.get(row.characterId)?.url ?? null,
       personaName: pe?.name ?? 'Unknown Persona',
       personaTagline: pe?.tagline ?? '',
+      personaAvatarUrl: personaAvatars.get(row.personaId)?.url ?? null,
       messageCount: countMap.get(row.id) ?? 0,
     };
   });
@@ -202,12 +207,15 @@ router.post('/', (req: Request, res: Response) => {
     messages.push(toMessageDto(savedGreeting));
   }
 
+  const charAvatars = getDefaultAvatarMap('character');
+  const personaAvatars = getDefaultAvatarMap('persona');
+
   const response: ApiResponse<RpSessionDetail> = {
     success: true,
     data: {
       session: toSessionDto(created),
-      character: toCharacterDto(charRow),
-      persona: toPersonaDto(personaRow),
+      character: toCharacterDto(charRow, charAvatars.get(charRow.id) ?? null),
+      persona: toPersonaDto(personaRow, personaAvatars.get(personaRow.id) ?? null),
       messages,
     },
   };
@@ -242,12 +250,15 @@ router.get('/:id', (req: Request, res: Response) => {
     .orderBy(asc(rpMessages.id))
     .all();
 
+  const charAvatars = getDefaultAvatarMap('character');
+  const personaAvatars = getDefaultAvatarMap('persona');
+
   const response: ApiResponse<RpSessionDetail> = {
     success: true,
     data: {
       session: toSessionDto(sessionRow),
-      character: toCharacterDto(charRow),
-      persona: toPersonaDto(personaRow),
+      character: toCharacterDto(charRow, charAvatars.get(charRow.id) ?? null),
+      persona: toPersonaDto(personaRow, personaAvatars.get(personaRow.id) ?? null),
       messages: msgRows.map(toMessageDto),
     },
   };

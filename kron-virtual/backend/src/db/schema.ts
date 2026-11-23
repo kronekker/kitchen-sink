@@ -74,3 +74,31 @@ export const rpMessages = sqliteTable('rp_messages', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
+
+export const generatedImages = sqliteTable('generated_images', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind').notNull(), // 'avatar' | 'session' | 'combined' | 'studio'
+  entityType: text('entity_type').notNull(), // 'character' | 'persona' | 'session' | 'studio'
+  entityId: integer('entity_id'),
+  isDefault: integer('is_default').notNull().default(0),
+  filename: text('filename').notNull(),
+  remoteUrl: text('remote_url'),
+  prompt: text('prompt').notNull(),
+  referenceImageIdsJson: text('reference_image_ids_json').notNull().default('[]'),
+  width: integer('width').notNull().default(1024),
+  height: integer('height').notNull().default(1024),
+  outputFormat: text('output_format').notNull().default('jpeg'),
+  wiroTaskId: text('wiro_task_id'),
+  elapsedSeconds: text('elapsed_seconds'),
+  cost: text('cost'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const imagePromptTemplates = sqliteTable('image_prompt_templates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  template: text('template').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
