@@ -1,0 +1,430 @@
+<div class="servers-stack">
+  @if (error()) {
+    <div class="vb-alert" style="border-color: var(--color-error); color: var(--color-error); margin: 0;">
+      <strong>Error:</strong> {{ error() }}
+    </div>
+  }
+
+  @if (notice()) {
+    <div class="vb-alert vb-alert-success" style="margin: 0;">
+      {{ notice() }}
+    </div>
+  }
+
+  <!-- Section 1: kron-llama-server.service (Port 8080) -->
+  <section class="vb-card">
+    <div class="vb-flex vb-flex-between vb-mb-4" style="flex-wrap: wrap; gap: var(--space-3); align-items: center;">
+      <div>
+        <h2 style="margin: 0;">kron-llama-server.service (Port 8080)</h2>
+        <div class="meta-strip" style="margin-top: 0.35rem;">
+          @if (serviceStatus(); as st) {
+            <span>Unit: {{ st.unit }}</span>
+            <span>PID: {{ st.mainPid ?? '—' }}</span>
+            @if (st.activeEnterTimestamp) {
+              <span>Since: {{ st.activeEnterTimestamp }}</span>
+            }
+          } @else {
+            <span>Loading systemd status...</span>
+          }
+        </div>
+      </div>
+
+      <div class="vb-flex vb-gap-2" style="align-items: center; flex-wrap: wrap;">
+        @if (serviceStatus(); as st) {
+          <span class="status-pill">
+            <span
+              class="status-dot"
+              [style.background-color]="st.activeState === 'active' ? '#22c55e' : st.activeState === 'activating' ? '#f59e0b' : '#ef4444'">
+            </span>
+            {{ st.activeState }} ({{ st.subState }})
+          </span>
+        }
+
+        <button class="vb-btn vb-btn-primary" [disabled]="isControlling()" (click)="controlService('start')">
+          ▶ Start
+        </button>
+        <button class="vb-btn vb-btn-secondary" [disabled]="isControlling()" (click)="controlService('restart')">
+          ↻ Restart
+        </button>
+        <button class="vb-btn vb-btn-secondary" [disabled]="isControlling()" (click)="controlService('stop')">
+          ■ Stop
+        </button>
+        <button class="vb-btn vb-btn-secondary" (click)="refreshServiceStatus()">
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Script Config Editor -->
+    <div style="padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
+      <div class="vb-flex vb-flex-between vb-mb-4" style="align-items: baseline; flex-wrap: wrap; gap: var(--space-2);">
+        <h3 style="margin: 0;">Launch Script Configuration</h3>
+        <span style="font-family: monospace; font-size: 0.8rem; color: var(--color-text-muted);">
+          {{ scriptPath() }}
+        </span>
+      </div>
+
+      <div class="config-grid vb-mb-4">
+        <div>
+          <label class="vb-label">MODEL_NAME (HuggingFace Repo)</label>
+          <input
+            class="vb-input"
+            type="text"
+            style="font-family: monospace;"
+            [value]="modelName()"
+            (input)="modelName.set($any($event.target).value)" />
+        </div>
+        <div>
+          <label class="vb-label">MODEL_QUANT</label>
+          <input
+            class="vb-input"
+            type="text"
+            style="font-family: monospace;"
+            [value]="modelQuant()"
+            (input)="modelQuant.set($any($event.target).value)" />
+        </div>
+        <div>
+          <label class="vb-label">MODEL_CTX</label>
+          <input
+            class="vb-input"
+            type="number"
+            min="512"
+            step="4096"
+            [value]="modelCtx()"
+            (input)="modelCtx.set($any($event.target).value)" />
+        </div>
+        <div>
+          <label class="vb-label">IS_MTP</label>
+          <select
+            class="vb-input"
+            [value]="isMtp()"
+            (change)="isMtp.set($any($event.target).value)">
+            <option value="unknown">unknown (auto)</option>
+            <option value="true">true (force on)</option>
+            <option value="false">false (force off)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="vb-flex vb-gap-2" style="flex-wrap: wrap;">
+        <button class="vb-btn vb-btn-primary" [disabled]="isSavingConfig()" (click)="saveConfig(false)">
+          Save Config
+        </button>
+        <button class="vb-btn vb-btn-primary" [disabled]="isSavingConfig()" (click)="saveConfig(true)">
+          Save &amp; Restart Service
+        </button>
+        <button class="vb-btn vb-btn-secondary" (click)="saveCurrentAsPreset()">
+          + Save as Preset
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Saved Model Presets -->
+  <section class="vb-card">
+    <div class="vb-flex vb-flex-between vb-mb-4" style="align-items: center;">
+      <div>
+        <h3 style="margin: 0;">Saved Model Presets</h3>
+        <p style="margin: 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          One-click load into <code>start-llama-cpp.sh</code> (stored in SQLite).
+        </p>
+      </div>
+    </div>
+
+    <div class="vb-flex-col vb-gap-2">
+      @for (preset of presets(); track preset.id) {
+        <div class="preset-row">
+          <div>
+            <div style="font-weight: 600;">{{ preset.name }}</div>
+            <div class="preset-meta">
+              {{ preset.modelName }}:{{ preset.modelQuant }} · ctx {{ preset.modelCtx }} · MTP={{ preset.isMtp }}
+            </div>
+            @if (preset.notes) {
+              <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 0.2rem;">
+                {{ preset.notes }}
+              </div>
+            }
+          </div>
+          <div class="vb-flex vb-gap-2">
+            <button class="vb-btn vb-btn-secondary" [disabled]="isSavingConfig()" (click)="applyPreset(preset, false)">
+              Load
+            </button>
+            <button class="vb-btn vb-btn-primary" [disabled]="isSavingConfig()" (click)="applyPreset(preset, true)">
+              Load &amp; Restart
+            </button>
+            <button class="vb-btn vb-btn-secondary" (click)="deletePreset(preset)">
+              ✕
+            </button>
+          </div>
+        </div>
+      } @empty {
+        <div style="color: var(--color-text-muted); font-style: italic; font-size: var(--text-sm);">
+          No presets saved yet. Click "+ Save as Preset" above to bookmark your current model configuration.
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Live journalctl Log Viewer -->
+  <section class="vb-card">
+    <div class="vb-flex vb-flex-between vb-mb-4" style="flex-wrap: wrap; gap: var(--space-2); align-items: center;">
+      <div>
+        <h3 style="margin: 0;">Live Service Logs (journalctl)</h3>
+        <span style="font-size: var(--text-sm); color: var(--color-text-muted);">
+          {{ isStreamingLogs() ? '🟢 Streaming' : '⚪ Paused' }} · {{ logLines().length }} lines
+        </span>
+      </div>
+
+      <div class="vb-flex vb-gap-2" style="align-items: center;">
+        <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--text-sm); cursor: pointer;">
+          <input
+            type="checkbox"
+            [checked]="autoScrollLogs()"
+            (change)="autoScrollLogs.set($any($event.target).checked)" />
+          Auto-scroll
+        </label>
+        <button class="vb-btn vb-btn-secondary" (click)="toggleLogStream()">
+          {{ isStreamingLogs() ? '⏸ Pause' : '▶ Stream' }}
+        </button>
+        <button class="vb-btn vb-btn-secondary" (click)="clearLogs()">
+          Clear
+        </button>
+      </div>
+    </div>
+
+    <div class="log-terminal" #logTerminal>
+      @for (entry of logLines(); track entry.id) {
+        <div [class.log-line-err]="entry.stream === 'stderr'">{{ entry.line }}</div>
+      } @empty {
+        <div style="color: #8b949e; font-style: italic;">Waiting for journalctl log lines...</div>
+      }
+    </div>
+  </section>
+
+  <!-- Section 2: Launch Persistent Container (from ai-toolbox-cockpit) -->
+  <section class="vb-card">
+    <div class="vb-mb-4">
+      <h2 style="margin: 0;">Launch Persistent Container (from ai-toolbox-cockpit)</h2>
+      <p style="margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+        Paste the transient <code>docker run</code> command copied from <code>ai-toolbox-cockpit</code>. The backend strips <code>--rm</code> / <code>-it</code>, adds <code>-d</code> and your restart policy, and launches it persistently so it survives TUI exit and shows up in Portainer.
+      </p>
+    </div>
+
+    @if (launcherError()) {
+      <div class="vb-alert vb-mb-4" style="border-color: var(--color-error); color: var(--color-error);">
+        <strong>Error:</strong> {{ launcherError() }}
+      </div>
+    }
+
+    @if (launcherSuccess()) {
+      <div class="vb-alert vb-alert-success vb-mb-4">
+        {{ launcherSuccess() }}
+      </div>
+    }
+
+    <div class="vb-flex-col vb-gap-4">
+      <div>
+        <label class="vb-label">Copied <code>docker run</code> / <code>podman run</code> Command</label>
+        <textarea
+          class="vb-input"
+          rows="4"
+          style="font-family: monospace; font-size: 0.82rem;"
+          placeholder="docker run --rm -it --name gufo-cockpit-server ..."
+          [value]="rawDockerCommand()"
+          (input)="rawDockerCommand.set($any($event.target).value); transformPreview.set(null)"></textarea>
+      </div>
+
+      <div class="launcher-options-grid">
+        <div>
+          <label class="vb-label">Restart Policy</label>
+          <select
+            class="vb-input"
+            [value]="restartPolicy()"
+            (change)="restartPolicy.set($any($event.target).value)">
+            <option value="unless-stopped">unless-stopped (Recommended)</option>
+            <option value="always">always</option>
+            <option value="on-failure">on-failure</option>
+            <option value="no">no (manual restart only)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="vb-label">Container Name Override (Optional)</label>
+          <input
+            class="vb-input"
+            type="text"
+            style="font-family: monospace;"
+            placeholder="Keep --name from command"
+            [value]="containerNameOverride()"
+            (input)="containerNameOverride.set($any($event.target).value)" />
+        </div>
+
+        <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--text-sm); cursor: pointer; padding-bottom: 0.55rem;">
+          <input
+            type="checkbox"
+            [checked]="replaceExisting()"
+            (change)="replaceExisting.set($any($event.target).checked)" />
+          Replace existing container with same name
+        </label>
+      </div>
+
+      <div class="vb-flex vb-gap-2" style="flex-wrap: wrap;">
+        <button class="vb-btn vb-btn-secondary" (click)="previewPersistentCommand()">
+          🔍 Preview Modified Command
+        </button>
+        <button
+          class="vb-btn vb-btn-primary"
+          [disabled]="isLaunchingContainer() || !rawDockerCommand().trim()"
+          (click)="launchPersistent()">
+          {{ isLaunchingContainer() ? 'Launching...' : '🚀 Launch Persistent Container' }}
+        </button>
+      </div>
+
+      @if (transformPreview(); as prev) {
+        <div class="container-card">
+          <div class="vb-flex vb-flex-between" style="flex-wrap: wrap; gap: var(--space-2); align-items: center;">
+            <div class="vb-flex vb-gap-2" style="flex-wrap: wrap; align-items: center;">
+              <strong style="font-size: var(--text-sm);">Flag Changes:</strong>
+              @for (f of prev.removedFlags; track f) {
+                <span class="flag-chip flag-removed">{{ f }}</span>
+              }
+              @for (f of prev.addedFlags; track f) {
+                <span class="flag-chip flag-added">+ {{ f }}</span>
+              }
+            </div>
+            <button
+              class="vb-btn vb-btn-secondary"
+              style="padding: 0.2rem 0.55rem; font-size: 0.78rem;"
+              (click)="copyPreviewCommand()">
+              {{ copiedPreview() ? '✓ Copied' : 'Copy Modified Command' }}
+            </button>
+          </div>
+          <div class="meta-strip">
+            <span>Runtime: {{ prev.runtime }}</span>
+            <span>Name: {{ prev.containerName || '(auto)' }}</span>
+            <span>Image: {{ prev.image }}</span>
+          </div>
+          <div class="command-box">{{ prev.formattedCommand }}</div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Section 3: ai-toolbox-cockpit Container Inspector (Port 8081, Read-Only) -->
+  <section class="vb-card">
+    <div class="vb-flex vb-flex-between vb-mb-4" style="flex-wrap: wrap; gap: var(--space-3); align-items: center;">
+      <div>
+        <h2 style="margin: 0;">ai-toolbox-cockpit Inspector (Port 8081 · Read-Only)</h2>
+        <p style="margin: 0.2rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          Inspects containers launched via <code>ai-toolbox-cockpit</code> on port <code>8081</code> (manage lifecycle in cockpit TUI or Portainer).
+        </p>
+      </div>
+      <button class="vb-btn vb-btn-secondary" [disabled]="isLoadingContainers()" (click)="refreshContainers()">
+        {{ isLoadingContainers() ? 'Scanning...' : '↻ Refresh Containers' }}
+      </button>
+    </div>
+
+    <div class="vb-flex-col vb-gap-4">
+      @for (c of cockpitContainers(); track c.id) {
+        <div class="container-card" [class.selected]="c.id === selectedContainerId()">
+          <div class="vb-flex vb-flex-between" style="flex-wrap: wrap; gap: var(--space-2); align-items: center;">
+            <div>
+              <div style="font-weight: 600; font-size: 1.05rem;">
+                {{ c.name }}
+                <span style="font-weight: 400; font-size: 0.78rem; color: var(--color-text-muted); margin-left: 0.4rem;">
+                  ({{ c.runtime }} · {{ c.id.slice(0, 12) }})
+                </span>
+              </div>
+              <div class="preset-meta" style="margin-top: 0.2rem;">
+                {{ c.image }}
+                @if (c.imageTitle) {
+                  <span> — {{ c.imageTitle }}</span>
+                }
+              </div>
+            </div>
+
+            <div class="vb-flex vb-gap-2" style="align-items: center; flex-wrap: wrap;">
+              <span class="status-pill">
+                <span
+                  class="status-dot"
+                  [style.background-color]="c.state.toLowerCase() === 'running' ? '#22c55e' : '#ef4444'">
+                </span>
+                {{ c.status || c.state }}
+              </span>
+              @if (c.id !== selectedContainerId()) {
+                <button class="vb-btn vb-btn-secondary" (click)="selectContainerForLogs(c)">
+                  View Logs
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="meta-strip">
+            @if (c.ports) {
+              <span>Ports: {{ c.ports }}</span>
+            }
+            @if (c.created) {
+              <span>Created: {{ c.created }}</span>
+            }
+          </div>
+
+          @if (c.command) {
+            <div>
+              <div class="vb-flex vb-flex-between" style="align-items: center; margin-bottom: 0.35rem;">
+                <span style="font-size: var(--text-sm); color: var(--color-text-muted);">Launch Command / Args</span>
+                <button
+                  class="vb-btn vb-btn-secondary"
+                  style="padding: 0.2rem 0.55rem; font-size: 0.78rem;"
+                  (click)="copyCommand(c)">
+                  {{ copiedCommandId() === c.id ? '✓ Copied' : 'Copy Command' }}
+                </button>
+              </div>
+              <div class="command-box">{{ c.command }}</div>
+            </div>
+          }
+        </div>
+      } @empty {
+        <div style="color: var(--color-text-muted); font-style: italic; font-size: var(--text-sm);">
+          No port <code>8081</code> or <code>cockpit</code> containers detected right now. Start one from <code>ai-toolbox-cockpit</code> and click Refresh.
+        </div>
+      }
+    </div>
+
+    @if (selectedContainerId()) {
+      <div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
+        <div class="vb-flex vb-flex-between vb-mb-4" style="flex-wrap: wrap; gap: var(--space-2); align-items: center;">
+          <div>
+            <h3 style="margin: 0;">Container Logs (Read-Only)</h3>
+            <span style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              {{ isStreamingContainerLogs() ? '🟢 Streaming' : '⚪ Paused' }} · {{ containerLogLines().length }} lines
+            </span>
+          </div>
+
+          <div class="vb-flex vb-gap-2" style="align-items: center;">
+            <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--text-sm); cursor: pointer;">
+              <input
+                type="checkbox"
+                [checked]="autoScrollContainerLogs()"
+                (change)="autoScrollContainerLogs.set($any($event.target).checked)" />
+              Auto-scroll
+            </label>
+            <button class="vb-btn vb-btn-secondary" (click)="toggleContainerLogStream()">
+              {{ isStreamingContainerLogs() ? '⏸ Pause' : '▶ Stream' }}
+            </button>
+            <button class="vb-btn vb-btn-secondary" (click)="clearContainerLogs()">
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <div class="log-terminal" #containerLogTerminal>
+          @for (entry of containerLogLines(); track entry.id) {
+            <div [class.log-line-err]="entry.stream === 'stderr'">{{ entry.line }}</div>
+          } @empty {
+            <div style="color: #8b949e; font-style: italic;">Waiting for container log lines...</div>
+          }
+        </div>
+      </div>
+    }
+  </section>
+</div>

@@ -1,0 +1,158 @@
+<div class="library-layout">
+  <!-- Character List -->
+  <aside class="vb-card library-list-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-3">
+      <h2 style="margin: 0; font-size: var(--text-lg);">Characters</h2>
+      <button class="vb-btn vb-btn-primary" style="padding: 0.35rem 0.7rem; font-size: var(--text-sm);" (click)="startCreate()">
+        + New
+      </button>
+    </div>
+
+    <div class="library-list">
+      @for (char of characters(); track char.id) {
+        <div
+          class="library-item"
+          [class.active]="editingId() === char.id"
+          (click)="selectForEdit(char)"
+        >
+          <div class="library-item-main">
+            <div class="library-item-name">{{ char.name }}</div>
+            @if (char.tagline) {
+              <div class="library-item-sub">{{ char.tagline }}</div>
+            }
+          </div>
+          <button
+            class="item-delete-btn"
+            title="Delete character"
+            (click)="deleteCharacter(char, $event)"
+          >
+            ✕
+          </button>
+        </div>
+      } @empty {
+        <div class="library-empty">No characters yet. Create one on the right.</div>
+      }
+    </div>
+  </aside>
+
+  <!-- Character Editor -->
+  <section class="vb-card library-editor-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-4">
+      <div>
+        <h2 style="margin: 0;">
+          {{ editingId() === null ? 'Create Character' : 'Edit Character' }}
+        </h2>
+        <p style="margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          Structured for KV-cacheable XML prompt blocks. Use <code ngNonBindable>{{char}}</code> and <code ngNonBindable>{{user}}</code> placeholders where helpful.
+        </p>
+      </div>
+      <div class="vb-flex vb-gap-2">
+        @if (editingId() !== null) {
+          <button class="vb-btn vb-btn-secondary" (click)="startCreate()">New Character</button>
+        }
+        <button class="vb-btn vb-btn-primary" [disabled]="isSaving()" (click)="save()">
+          {{ isSaving() ? 'Saving...' : (editingId() === null ? 'Create Character' : 'Save Changes') }}
+        </button>
+      </div>
+    </div>
+
+    @if (error()) {
+      <div class="vb-alert vb-alert-error vb-mb-4">{{ error() }}</div>
+    }
+    @if (statusMsg()) {
+      <div class="vb-alert vb-alert-success vb-mb-4">{{ statusMsg() }}</div>
+    }
+
+    <div class="editor-grid">
+      <div class="vb-grid vb-grid-cols-2">
+        <div>
+          <label class="vb-label">Name *</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="e.g. Vex"
+            [value]="name()"
+            (input)="name.set($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="vb-label">Tagline</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="Short 1-line summary for cards"
+            [value]="tagline()"
+            (input)="tagline.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="vb-label">Description & Background</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="3"
+          placeholder="Appearance, background, role in the world..."
+          [value]="description()"
+          (input)="description.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <div class="vb-grid vb-grid-cols-2">
+        <div>
+          <label class="vb-label">Personality & Flaws</label>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="3"
+            placeholder="Core traits, motivations, blind spots..."
+            [value]="personality()"
+            (input)="personality.set($any($event.target).value)"
+          ></textarea>
+        </div>
+        <div>
+          <label class="vb-label">Speech Patterns & Style</label>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="3"
+            placeholder="Cadence, vocabulary, action beat habits..."
+            [value]="speechPatterns()"
+            (input)="speechPatterns.set($any($event.target).value)"
+          ></textarea>
+        </div>
+      </div>
+
+      <div>
+        <label class="vb-label">Default Scenario</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="2"
+          placeholder="Where and how scenes with this character typically begin..."
+          [value]="scenario()"
+          (input)="scenario.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="vb-label">Opening Greeting (First Message)</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="3"
+          placeholder="Seeded as the character's opening turn when starting a new session..."
+          [value]="firstMessage()"
+          (input)="firstMessage.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="vb-label">Example Dialogue (Few-Shot Voice Anchor)</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="4"
+          placeholder="2-3 short sample exchanges showing rhythm, formatting, and character voice..."
+          [value]="exampleDialogue()"
+          (input)="exampleDialogue.set($any($event.target).value)"
+        ></textarea>
+      </div>
+    </div>
+  </section>
+</div>

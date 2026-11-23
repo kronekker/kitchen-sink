@@ -1,0 +1,129 @@
+<div class="library-layout">
+  <!-- Persona List -->
+  <aside class="vb-card library-list-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-3">
+      <h2 style="margin: 0; font-size: var(--text-lg);">Personas</h2>
+      <button class="vb-btn vb-btn-primary" style="padding: 0.35rem 0.7rem; font-size: var(--text-sm);" (click)="startCreate()">
+        + New
+      </button>
+    </div>
+
+    <div class="library-list">
+      @for (persona of personas(); track persona.id) {
+        <div
+          class="library-item"
+          [class.active]="editingId() === persona.id"
+          (click)="selectForEdit(persona)"
+        >
+          <div class="library-item-main">
+            <div class="vb-flex vb-flex-center vb-gap-2">
+              <span class="library-item-name">{{ persona.name }}</span>
+              @if (persona.isDefault) {
+                <span class="default-badge">Default</span>
+              }
+            </div>
+            @if (persona.tagline) {
+              <div class="library-item-sub">{{ persona.tagline }}</div>
+            } @else if (persona.description) {
+              <div class="library-item-sub">{{ persona.description }}</div>
+            }
+          </div>
+          <button
+            class="item-delete-btn"
+            title="Delete persona"
+            (click)="deletePersona(persona, $event)"
+          >
+            ✕
+          </button>
+        </div>
+      } @empty {
+        <div class="library-empty">No personas yet. Create one on the right.</div>
+      }
+    </div>
+  </aside>
+
+  <!-- Persona Editor -->
+  <section class="vb-card library-editor-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-4">
+      <div>
+        <h2 style="margin: 0;">
+          {{ editingId() === null ? 'Create Persona' : 'Edit Persona' }}
+        </h2>
+        <p style="margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          Defines who you roleplay as inside the static <code>&lt;user_persona&gt;</code> block.
+        </p>
+      </div>
+      <div class="vb-flex vb-gap-2">
+        @if (editingId() !== null) {
+          <button class="vb-btn vb-btn-secondary" (click)="startCreate()">New Persona</button>
+        }
+        <button class="vb-btn vb-btn-primary" [disabled]="isSaving()" (click)="save()">
+          {{ isSaving() ? 'Saving...' : (editingId() === null ? 'Create Persona' : 'Save Changes') }}
+        </button>
+      </div>
+    </div>
+
+    @if (error()) {
+      <div class="vb-alert vb-alert-error vb-mb-4">{{ error() }}</div>
+    }
+    @if (statusMsg()) {
+      <div class="vb-alert vb-alert-success vb-mb-4">{{ statusMsg() }}</div>
+    }
+
+    <div class="editor-grid">
+      <div class="vb-grid vb-grid-cols-2">
+        <div>
+          <label class="vb-label">Persona Name *</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="e.g. Kael"
+            [value]="name()"
+            (input)="name.set($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="vb-label">Tagline</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="Short 1-line summary for cards & dropdowns"
+            [value]="tagline()"
+            (input)="tagline.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="vb-label">Appearance & Demeanor</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="4"
+          placeholder="Physical description, mannerisms, how characters perceive you..."
+          [value]="description()"
+          (input)="description.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="vb-label">Background & Key Facts</label>
+        <textarea
+          class="vb-input editor-textarea"
+          rows="4"
+          placeholder="History, skills, relationship hooks..."
+          [value]="background()"
+          (input)="background.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <label class="checkbox-row">
+        <input
+          type="checkbox"
+          [checked]="isDefault()"
+          (change)="isDefault.set($any($event.target).checked)"
+        />
+        <span>Set as default persona for new RP sessions</span>
+      </label>
+    </div>
+  </section>
+</div>

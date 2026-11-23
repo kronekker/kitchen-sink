@@ -1,0 +1,302 @@
+<div class="styles-layout">
+  <!-- Style Presets List -->
+  <aside class="vb-card styles-list-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-3">
+      <h2 style="margin: 0; font-size: var(--text-lg);">Tone &amp; Styles</h2>
+      <button class="vb-btn vb-btn-primary" style="padding: 0.35rem 0.7rem; font-size: var(--text-sm);" (click)="startCreate()">
+        + New
+      </button>
+    </div>
+
+    <div class="styles-list">
+      @for (s of styles(); track s.id) {
+        <div
+          class="style-item"
+          [class.active]="editingId() === s.id"
+          (click)="selectForEdit(s)"
+        >
+          <div class="style-item-main">
+            <div class="vb-flex vb-flex-center vb-gap-2">
+              <span class="style-item-name">{{ s.name }}</span>
+              @if (s.isDefault) {
+                <span class="badge badge-primary">Default</span>
+              }
+            </div>
+            @if (s.description) {
+              <div class="style-item-sub">{{ s.description }}</div>
+            }
+            <div class="style-item-meta">
+              T {{ s.params.temperature ?? '—' }} · minP {{ s.params.min_p ?? '—' }} · DRY {{ s.params.dry_multiplier ?? 'off' }}
+            </div>
+          </div>
+          <button
+            class="item-delete-btn"
+            title="Delete style"
+            (click)="deleteStyle(s, $event)"
+          >
+            ✕
+          </button>
+        </div>
+      } @empty {
+        <div class="styles-empty">No style presets yet. Create one on the right.</div>
+      }
+    </div>
+  </aside>
+
+  <!-- Style Editor -->
+  <section class="vb-card styles-editor-panel">
+    <div class="vb-flex vb-flex-between vb-flex-center vb-mb-4" style="flex-wrap: wrap; gap: var(--space-2);">
+      <div>
+        <h2 style="margin: 0;">
+          {{ editingId() === null ? 'Create Tone & Style Preset' : 'Edit Tone & Style Preset' }}
+        </h2>
+        <p style="margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          Bundle prompt rules and sampling settings into reusable presets selectable when starting a new session.
+        </p>
+      </div>
+      <div class="vb-flex vb-gap-2">
+        @if (editingId() !== null) {
+          <button class="vb-btn vb-btn-secondary" (click)="startCreate()">New Style</button>
+        }
+        <button class="vb-btn vb-btn-primary" [disabled]="isSaving()" (click)="save()">
+          {{ isSaving() ? 'Saving...' : (editingId() === null ? 'Create Style' : 'Save Changes') }}
+        </button>
+      </div>
+    </div>
+
+    @if (error()) {
+      <div class="vb-alert vb-alert-error vb-mb-4">{{ error() }}</div>
+    }
+    @if (statusMsg()) {
+      <div class="vb-alert vb-alert-success vb-mb-4">{{ statusMsg() }}</div>
+    }
+
+    <div class="editor-sections">
+      <!-- General Metadata -->
+      <div class="vb-grid vb-grid-cols-2">
+        <div>
+          <label class="vb-label">Style Name *</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="e.g. Grounded Realism, Cinematic Noir"
+            [value]="name()"
+            (input)="name.set($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="vb-label">Short Description</label>
+          <input
+            class="vb-input"
+            type="text"
+            placeholder="What kind of tone, pacing, or prose style this preset produces"
+            [value]="description()"
+            (input)="description.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
+      <label class="checkbox-row">
+        <input
+          type="checkbox"
+          [checked]="isDefault()"
+          (change)="isDefault.set($any($event.target).checked)"
+        />
+        <span>Pre-select this style by default when starting a new RP session</span>
+      </label>
+
+      <!-- SECTION 1: INDEX 0 (STATIC PREFIX — AFFECTS KV CACHE) -->
+      <div class="group-card group-index0">
+        <div class="group-header">
+          <div class="vb-flex vb-flex-center vb-gap-2">
+            <h3 style="margin: 0;">Index 0 — Static System Prefix</h3>
+            <span class="badge badge-warn">Affects KV Cache</span>
+          </div>
+          <p class="group-explainer">
+            Placed once at the very top of the prompt (<code>messages[0]</code>) alongside the Character and Persona.
+            Local engines (<code>llama.cpp</code>, vLLM) cache these tokens across turns for fast responses.
+            <strong>Editing Index 0 items mid-session invalidates the prefix KV cache</strong> and triggers a full prompt re-evaluation on the next turn — set these at session start and avoid changing them often.
+          </p>
+        </div>
+
+        <div class="field-block">
+          <label class="vb-label">Directives (<code>&lt;directives&gt;</code>)</label>
+          <p class="field-help">
+            High-level narrative rules: POV, tense, boundaries, and voice guidelines. Supports
+            <code ngNonBindable>{{char}}</code> and <code ngNonBindable>{{user}}</code> placeholders.
+            <em ngNonBindable>Example: "Write in third-person limited, past tense. Stay strictly in character as {{char}}. Never narrate {{user}}'s actions or thoughts."</em>
+          </p>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="3"
+            [value]="directives()"
+            (input)="directives.set($any($event.target).value)"
+          ></textarea>
+        </div>
+
+        <div class="field-block">
+          <label class="vb-label">Scenario Override (<code>&lt;scenario&gt;</code> · Optional)</label>
+          <p class="field-help">
+            Usually left blank so each Character's own default scenario is used. Fill this in only if this style enforces a specific framing or shared setting across characters.
+          </p>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="2"
+            placeholder="Leave blank to inherit the character's default scenario"
+            [value]="scenarioOverride()"
+            (input)="scenarioOverride.set($any($event.target).value)"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- SECTION 2: DEPTH 1 (DYNAMIC PER-TURN STEERING — KV-CACHE SAFE) -->
+      <div class="group-card group-depth1">
+        <div class="group-header">
+          <div class="vb-flex vb-flex-center vb-gap-2">
+            <h3 style="margin: 0;">Depth 1 — Dynamic Per-Turn Steering</h3>
+            <span class="badge badge-safe">KV-Cache Safe</span>
+          </div>
+          <p class="group-explainer">
+            Injected inline right before your latest user message (not as a second system message).
+            Because LLMs attend most strongly to the end of the context, Depth 1 has strong influence over the immediate reply — and <strong>changing these mid-session does NOT invalidate your cached Index 0 prefix or earlier turns</strong>.
+          </p>
+        </div>
+
+        <div class="field-block">
+          <label class="vb-label">Scene Note / Author's Note (<code>&lt;scene_note&gt;</code>)</label>
+          <p class="field-help">
+            Active mood, tension, location shift, or immediate plot constraint for the next reply.
+            <em>Example: "Tone: tense, rain-soaked, suspicious. Keep the conversation focused on the missing ledger."</em>
+          </p>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="2"
+            [value]="sceneNote()"
+            (input)="sceneNote.set($any($event.target).value)"
+          ></textarea>
+        </div>
+
+        <div class="field-block">
+          <label class="vb-label">Cadence Reminder (<code>&lt;cadence_reminder&gt;</code>)</label>
+          <p class="field-help">
+            Short 1–2 line prose-rhythm anchor to prevent long-thread style drift. Phrase positively ("Write crisp dialogue with brief physical beats") rather than long "Do NOT..." ban lists, which often trigger the exact clichés you forbid.
+          </p>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="2"
+            [value]="cadenceReminder()"
+            (input)="cadenceReminder.set($any($event.target).value)"
+          ></textarea>
+        </div>
+
+        <div class="field-block">
+          <label class="vb-label">Auto-Suggest Reply Instruction (<code>&lt;impersonate_request&gt;</code>)</label>
+          <p class="field-help">
+            Sent as an ephemeral Depth-0 turn when you click <strong>Suggest</strong> / <strong>Expand</strong> in the chat composer, keeping your Index 0 and conversation KV cache intact. Supports <code ngNonBindable>{{user}}</code> and <code ngNonBindable>{{char}}</code> placeholders.
+          </p>
+          <textarea
+            class="vb-input editor-textarea"
+            rows="3"
+            [value]="suggestPrompt()"
+            (input)="suggestPrompt.set($any($event.target).value)"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- SECTION 3: INFERENCE SAMPLERS (KV-CACHE SAFE) -->
+      <div class="group-card group-samplers">
+        <div class="group-header">
+          <div class="vb-flex vb-flex-center vb-gap-2">
+            <h3 style="margin: 0;">Inference Samplers</h3>
+            <span class="badge badge-safe">KV-Cache Safe</span>
+          </div>
+          <p class="group-explainer">
+            Control how the model picks the next token during generation. Adjusting samplers never invalidates the KV cache and takes effect immediately on the next reply or Regenerate.
+          </p>
+        </div>
+
+        <div class="sampler-guide-grid">
+          <div class="sampler-item">
+            <label class="vb-label">Temperature</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="2"
+              [value]="temperature()"
+              (input)="temperature.set($any($event.target).value)"
+            />
+            <p class="sampler-help">
+              Controls creativity vs. predictability. Lower (<code>0.6–0.75</code>) is grounded and focused; higher (<code>0.85–1.05</code>) gives more varied phrasing and surprising turns.
+            </p>
+          </div>
+
+          <div class="sampler-item">
+            <label class="vb-label">Top P (Nucleus)</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              [value]="topP()"
+              (input)="topP.set($any($event.target).value)"
+            />
+            <p class="sampler-help">
+              Limits sampling to the smallest token set whose combined probability reaches P. Keep around <code>0.92–0.98</code> when pairing with Min P.
+            </p>
+          </div>
+
+          <div class="sampler-item">
+            <label class="vb-label">Min P</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              [value]="minP()"
+              (input)="minP.set($any($event.target).value)"
+            />
+            <p class="sampler-help">
+              Dynamically trims unlikely garbage tokens relative to the top choice. <code>0.05–0.10</code> is the local RP sweet spot — lets higher temperatures stay coherent.
+            </p>
+          </div>
+
+          <div class="sampler-item">
+            <label class="vb-label">Max Tokens</label>
+            <input
+              class="vb-input"
+              type="number"
+              min="1"
+              placeholder="Server default"
+              [value]="maxTokens()"
+              (input)="maxTokens.set($any($event.target).value)"
+            />
+            <p class="sampler-help">
+              Hard ceiling on reply length per turn. Leave blank to let the server decide, or set e.g. <code>250–400</code> to enforce shorter, snappier replies.
+            </p>
+          </div>
+
+          <div class="sampler-item">
+            <label class="vb-label">DRY Multiplier (llama.cpp)</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.1"
+              min="0"
+              max="5"
+              placeholder="Off (0)"
+              [value]="dryMultiplier()"
+              (input)="dryMultiplier.set($any($event.target).value)"
+            />
+            <p class="sampler-help">
+              "Don't Repeat Yourself" sampler: penalizes repeated multi-word phrases across the conversation without hurting grammar. Try <code>0.6–0.9</code> (<code>0</code> or blank disables).
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

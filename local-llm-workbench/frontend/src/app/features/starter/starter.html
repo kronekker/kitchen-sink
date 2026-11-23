@@ -1,0 +1,117 @@
+@if (endpointStatusService.error()) {
+  <div class="vb-card vb-mb-4" style="border-color: var(--color-error); background-color: var(--color-error); color: white;">
+    <strong>Probe Error:</strong> {{ endpointStatusService.error() }}
+  </div>
+}
+
+<!-- Live Local LLM Endpoints -->
+<section class="vb-mb-6">
+  <div class="vb-flex vb-flex-between vb-mb-4" style="align-items: center;">
+    <div>
+      <h2 style="margin: 0;">Local LLM Endpoints</h2>
+      <p style="color: var(--color-text-muted); margin: 0;">
+        Live health &amp; active model discovery via <code>/v1/models</code> and <code>/health</code>.
+      </p>
+    </div>
+    <button class="vb-btn vb-btn-secondary" [disabled]="endpointStatusService.isLoading()" (click)="refreshAll()">
+      {{ endpointStatusService.isLoading() ? 'Probing...' : '↻ Probe All' }}
+    </button>
+  </div>
+
+  <div class="vb-grid vb-grid-cols-2 vb-gap-4">
+    @for (ep of endpointStatusService.statuses(); track ep.endpointId) {
+      <div class="vb-card vb-card-hoverable">
+        <div class="vb-flex vb-flex-between vb-mb-4" style="align-items: flex-start; gap: var(--space-2);">
+          <div>
+            <h3 style="margin: 0;">{{ ep.name }}</h3>
+            <div style="font-family: monospace; font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 0.2rem;">
+              {{ ep.baseUrl }}
+            </div>
+          </div>
+          <div class="vb-flex vb-gap-2" style="align-items: center;">
+            <span class="status-badge">
+              <span class="status-dot"
+                [style.background-color]="ep.status === 'online' ? '#22c55e' : ep.status === 'loading' ? '#f59e0b' : '#ef4444'">
+              </span>
+              {{ ep.status }}
+              @if (ep.latencyMs !== null) {
+                <span style="color: var(--color-text-muted);">({{ ep.latencyMs }}ms)</span>
+              }
+            </span>
+            @if (!ep.isBuiltIn) {
+              <button class="vb-delete-btn" (click)="deleteEndpoint(ep.endpointId, ep.name)" title="Remove endpoint" aria-label="Remove endpoint">
+                ✕
+              </button>
+            }
+          </div>
+        </div>
+
+        @if (ep.status === 'online') {
+          <div class="vb-flex-col vb-gap-2">
+            <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+              Discovered Models ({{ ep.models.length }})
+            </div>
+            @if (ep.models.length > 0) {
+              <div class="vb-flex vb-gap-2" style="flex-wrap: wrap;">
+                @for (model of ep.models; track model.id) {
+                  <span class="model-chip">{{ model.id }}</span>
+                }
+              </div>
+            } @else {
+              <div style="color: var(--color-text-muted); font-style: italic; font-size: var(--text-sm);">
+                Endpoint is online, but <code>/v1/models</code> returned no models.
+              </div>
+            }
+          </div>
+        } @else if (ep.status === 'loading') {
+          <div class="vb-alert vb-alert-info" style="margin-bottom: 0;">
+            Model is currently loading on this server...
+          </div>
+        } @else {
+          <div style="color: var(--color-text-muted); font-size: var(--text-sm);">
+            Server is offline{{ ep.error ? ' (' + ep.error + ')' : '' }}.
+          </div>
+        }
+      </div>
+    } @empty {
+      <div class="vb-card" style="color: var(--color-text-muted); font-style: italic;">
+        Probing configured endpoints...
+      </div>
+    }
+  </div>
+</section>
+
+<!-- Add Custom OpenAI-Compatible Endpoint -->
+<section class="vb-card">
+  <h3 style="margin-top: 0;">Add Custom Endpoint</h3>
+  <p style="color: var(--color-text-muted); font-size: var(--text-sm); margin-top: 0;">
+    Connect any additional OpenAI-compatible server (e.g., another local container, LAN host, or Ollama).
+  </p>
+
+  @if (formError()) {
+    <div class="vb-mb-4" style="color: var(--color-error); font-size: var(--text-sm);">
+      {{ formError() }}
+    </div>
+  }
+
+  <div class="vb-grid vb-grid-cols-3 vb-gap-4" style="align-items: end;">
+    <div>
+      <label class="vb-label">Display Name</label>
+      <input class="vb-input" type="text" #epName placeholder="e.g. Ollama Local" />
+    </div>
+    <div>
+      <label class="vb-label">Base URL</label>
+      <input class="vb-input" type="url" #epUrl placeholder="http://127.0.0.1:11434" />
+    </div>
+    <div>
+      <label class="vb-label">API Key (Optional)</label>
+      <input class="vb-input" type="password" #epKey placeholder="Leave blank for local" />
+    </div>
+  </div>
+
+  <div class="vb-mt-4">
+    <button class="vb-btn vb-btn-primary" [disabled]="isSaving()" (click)="addEndpoint(epName, epUrl, epKey)">
+      {{ isSaving() ? 'Saving...' : '+ Add Endpoint' }}
+    </button>
+  </div>
+</section>

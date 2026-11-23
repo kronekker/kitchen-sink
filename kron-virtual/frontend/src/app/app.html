@@ -1,0 +1,109 @@
+<div class="vb-flex" style="min-height: 100vh;">
+  <!-- Side Navigation -->
+  <nav class="vb-flex-col vb-gap-4"
+    style="border-right: 1px solid var(--color-border); padding: var(--space-4); background-color: var(--color-surface); transition: width 0.3s ease; overflow: hidden;"
+    [style.width]="isSidebarOpen() ? '230px' : '72px'">
+
+    <div
+      style="padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); display: flex; align-items: center;"
+      [style.justify-content]="isSidebarOpen() ? 'space-between' : 'center'">
+      @if (isSidebarOpen()) {
+        <div style="white-space: nowrap; overflow: hidden; margin-right: var(--space-2); display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);">
+          <img src="logo.png" alt="Logo" style="height: 28px; width: 135px; object-fit: contain;">
+          <h2 style="margin-bottom: 0; font-size: var(--text-lg);">{{ appInfo()?.name || 'Kron Virtual' }}</h2>
+        </div>
+      }
+      <button class="vb-btn vb-btn-secondary" style="padding: var(--space-1) var(--space-2); min-width: auto;"
+        (click)="toggleSidebar()">
+        <span style="font-size: 1.1rem;">{{ isSidebarOpen() ? '◀' : '☰' }}</span>
+      </button>
+    </div>
+
+    <div class="vb-flex-col vb-gap-2">
+      <a routerLink="/sessions" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>💬</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Sessions</span> }
+      </a>
+      <a routerLink="/characters" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>🎭</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Characters</span> }
+      </a>
+      <a routerLink="/personas" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>👤</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Personas</span> }
+      </a>
+      <a routerLink="/styles" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>🎛️</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Styles</span> }
+      </a>
+    </div>
+
+    <!-- Theme Selector pinned to bottom -->
+    <div
+      style="margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--color-border); overflow: hidden; white-space: nowrap;">
+      @if (isSidebarOpen()) {
+        <app-theme-selector></app-theme-selector>
+      } @else {
+        <div style="text-align: center; font-size: 1.2rem; cursor: pointer;" title="Theme (Expand to change)"
+          (click)="toggleSidebar()">
+          ⚙️
+        </div>
+      }
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main style="flex: 1; padding: var(--space-4) var(--space-5); overflow-y: auto; display: flex; flex-direction: column;">
+    <header class="app-topbar">
+      <div>
+        <h1 style="margin: 0; font-size: var(--text-xl);">{{ appInfo()?.name || 'Kron Virtual' }}</h1>
+        <p style="margin: 0.15rem 0 0; color: var(--color-text-muted); font-size: var(--text-sm);">
+          {{ appInfo()?.subtitle || 'Local LLM virtual character & roleplay engine' }}
+        </p>
+      </div>
+
+      <!-- Active Local Engine Status Pill -->
+      <div class="engine-pill" [title]="engineStatus.engine()?.error || 'Auto-detected local inference engine'">
+        @if (engineStatus.engine(); as eng) {
+          <span
+            class="engine-dot"
+            [class.online]="eng.status === 'online'"
+            [class.loading]="eng.status === 'loading'"
+            [class.offline]="eng.status === 'offline'"
+          ></span>
+          @if (eng.status === 'online') {
+            <span class="engine-label">:{{ eng.port }}</span>
+            <span class="engine-model">{{ eng.activeModel || eng.label }}</span>
+          } @else if (eng.status === 'loading') {
+            <span class="engine-label">:{{ eng.port }} Loading...</span>
+          } @else {
+            <span class="engine-label">No Local Engine (8080/8081)</span>
+          }
+        } @else {
+          <span class="engine-dot offline"></span>
+          <span class="engine-label">Probing 8080/8081...</span>
+        }
+        <button
+          class="engine-refresh-btn"
+          [disabled]="engineStatus.isChecking()"
+          (click)="engineStatus.refresh(true)"
+          title="Re-detect local inference engine"
+        >
+          ↻
+        </button>
+      </div>
+    </header>
+
+    <div style="flex: 1;">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

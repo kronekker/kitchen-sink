@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "scripts": {
+    "bootstrap": "npm install --prefix cli && npm start --prefix cli",
+    "dev": "./serve.sh dev",
+    "build": "./serve.sh build",
+    "prod": "./serve.sh prod"
+  },
+  "keywords": [
+    "monorepo",
+    "express",
+    "angular",
+    "drizzle-orm",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "name": "local-llm-workbench",
+  "description": "Local LLM server manager and streaming chat tester"
+}

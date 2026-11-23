@@ -1,0 +1,289 @@
+<div class="chat-layout">
+  <!-- Left: Conversation History Sidebar -->
+  <aside class="vb-card chat-sessions-panel">
+    <button class="vb-btn vb-btn-primary" style="width: 100%;" (click)="createNewChat()">
+      + New Chat
+    </button>
+
+    <div class="chat-sessions-list">
+      @for (session of sessions(); track session.id) {
+        <div
+          class="session-item"
+          [class.active]="session.id === activeSessionId()"
+          (click)="selectSession(session.id)">
+          <span class="session-title" [title]="session.title">{{ session.title }}</span>
+          <button
+            class="session-delete"
+            title="Delete conversation"
+            (click)="deleteSession(session.id, $event)">
+            ✕
+          </button>
+        </div>
+      } @empty {
+        <div style="color: var(--color-text-muted); font-size: var(--text-sm); font-style: italic; padding: 0.5rem;">
+          No conversations yet.
+        </div>
+      }
+    </div>
+  </aside>
+
+  <!-- Right: Main Streaming Chat Workspace -->
+  <section class="vb-card chat-main-panel">
+    <!-- Top Endpoint, Model & TPS Bar -->
+    <div class="chat-toolbar">
+      <select
+        class="vb-input toolbar-select"
+        [value]="selectedEndpointId() ?? ''"
+        (change)="onEndpointChange($event)"
+        aria-label="Target LLM Endpoint">
+        @for (ep of endpointStatusService.statuses(); track ep.endpointId) {
+          <option [value]="ep.endpointId">
+            {{ ep.status === 'online' ? '🟢' : ep.status === 'loading' ? '🟡' : '🔴' }} {{ ep.name }}
+          </option>
+        }
+      </select>
+
+      @if (availableModels().length > 0) {
+        <select
+          class="vb-input toolbar-select"
+          [value]="selectedModelId()"
+          (change)="onModelSelectChange($event)"
+          aria-label="Model">
+          @for (model of availableModels(); track model.id) {
+            <option [value]="model.id">{{ model.id }}</option>
+          }
+        </select>
+      } @else {
+        <input
+          class="vb-input toolbar-model-input"
+          type="text"
+          placeholder="Model ID (manual)"
+          [value]="selectedModelId()"
+          (input)="selectedModelId.set($any($event.target).value)" />
+      }
+
+      <button
+        class="vb-btn vb-btn-secondary"
+        style="padding: 0.4rem 0.7rem; font-size: var(--text-sm);"
+        (click)="showSettings.update(v => !v)">
+        ⚙️ {{ showSettings() ? 'Hide Prompt & Params' : 'Prompt & Params' }}
+      </button>
+
+      <button
+        class="vb-btn"
+        [class.vb-btn-primary]="renderMarkdown()"
+        [class.vb-btn-secondary]="!renderMarkdown()"
+        style="padding: 0.4rem 0.7rem; font-size: var(--text-sm);"
+        title="Toggle rendered Markdown vs raw plain text"
+        (click)="renderMarkdown.update(v => !v)">
+        {{ renderMarkdown() ? 'MD: On' : 'MD: Raw' }}
+      </button>
+
+      <button
+        class="vb-btn vb-btn-secondary"
+        style="padding: 0.4rem 0.7rem; font-size: var(--text-sm);"
+        [disabled]="isStreaming() || messages().length === 0"
+        (click)="clearMessages()">
+        Clear
+      </button>
+
+      @if (liveMetrics(); as m) {
+        <div class="tps-pill" [title]="m.estimated ? 'Estimated from streamed chunks' : 'Reported by server'">
+          <span class="tps-value">
+            {{ m.estimated ? '~' : '' }}{{ m.tokensPerSecond ?? '—' }} tok/s
+          </span>
+          @if (m.ttftMs !== null) {
+            <span>TTFT {{ m.ttftMs }}ms</span>
+          }
+          <span>{{ m.completionTokens }} tok</span>
+        </div>
+      }
+    </div>
+
+    <!-- Collapsible System Prompt & Inference Parameters -->
+    @if (showSettings()) {
+      <div class="settings-drawer">
+        <div class="vb-flex vb-gap-2" style="align-items: center; flex-wrap: wrap;">
+          <label class="vb-label" style="margin: 0;">System Prompt Preset:</label>
+          <select
+            class="vb-input"
+            style="width: auto; min-width: 200px;"
+            [value]="selectedPresetId()"
+            (change)="onPresetChange($event)">
+            <option value="">-- Custom --</option>
+            @for (preset of promptPresets(); track preset.id) {
+              <option [value]="preset.id">{{ preset.name }}</option>
+            }
+          </select>
+          <button
+            class="vb-btn vb-btn-secondary"
+            style="padding: 0.35rem 0.65rem; font-size: var(--text-sm);"
+            (click)="saveCurrentAsPreset()">
+            + Save Preset
+          </button>
+          @if (selectedPresetId()) {
+            <button
+              class="vb-btn vb-btn-secondary"
+              style="padding: 0.35rem 0.65rem; font-size: var(--text-sm);"
+              (click)="deleteSelectedPreset()">
+              Delete Preset
+            </button>
+          }
+        </div>
+
+        <div>
+          <label class="vb-label">System Prompt</label>
+          <textarea
+            class="vb-input"
+            rows="3"
+            placeholder="Optional system prompt..."
+            [value]="systemPrompt()"
+            (input)="systemPrompt.set($any($event.target).value)"></textarea>
+        </div>
+
+        <div class="params-row">
+          <div>
+            <label class="vb-label">Temperature</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="2"
+              placeholder="0.7"
+              [value]="temperature()"
+              (input)="temperature.set($any($event.target).value)" />
+          </div>
+          <div>
+            <label class="vb-label">Top P</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              placeholder="0.95"
+              [value]="topP()"
+              (input)="topP.set($any($event.target).value)" />
+          </div>
+          <div>
+            <label class="vb-label">Max Tokens</label>
+            <input
+              class="vb-input"
+              type="number"
+              step="128"
+              min="1"
+              placeholder="Server default"
+              [value]="maxTokens()"
+              (input)="maxTokens.set($any($event.target).value)" />
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (error()) {
+      <div class="vb-alert" style="border-color: var(--color-error); color: var(--color-error); margin: 0;">
+        <strong>Error:</strong> {{ error() }}
+      </div>
+    }
+
+    <!-- Transcript -->
+    <div class="chat-transcript" #transcriptContainer>
+      @for (msg of messages(); track msg.id) {
+        <article class="message-bubble" [class.role-user]="msg.role === 'user'" [class.role-assistant]="msg.role === 'assistant'">
+          <div class="message-header">
+            <span class="message-role">{{ msg.role === 'user' ? 'You' : (msg.modelId || 'Assistant') }}</span>
+            @if (msg.endpointName && msg.role === 'assistant') {
+              <span>{{ msg.endpointName }}</span>
+            }
+          </div>
+
+          @if (msg.reasoningContent) {
+            <details class="thinking-details">
+              <summary>Reasoning / Thinking</summary>
+              <div class="thinking-body">{{ msg.reasoningContent }}</div>
+            </details>
+          }
+
+          @if (msg.role === 'assistant' && renderMarkdown()) {
+            <div class="vb-markdown" [innerHTML]="msg.content | markdown"></div>
+          } @else {
+            <div class="message-content">{{ msg.content }}</div>
+          }
+
+          @if (msg.metrics; as m) {
+            <div class="message-metrics">
+              <span><strong>{{ m.estimated ? '~' : '' }}{{ m.tokensPerSecond ?? '—' }} tok/s</strong></span>
+              @if (m.ttftMs !== null) {
+                <span>TTFT: {{ m.ttftMs }}ms</span>
+              }
+              <span>Output: {{ m.estimated ? '~' : '' }}{{ m.completionTokens }} tok</span>
+              @if (m.promptTokens !== null) {
+                <span>Prompt: {{ m.promptTokens }} tok</span>
+              }
+              <span>Total: {{ (m.totalMs / 1000).toFixed(2) }}s</span>
+            </div>
+          }
+        </article>
+      }
+
+      @if (isStreaming()) {
+        <article class="message-bubble role-assistant">
+          <div class="message-header">
+            <span class="message-role">{{ selectedModelId() || 'Assistant' }} (streaming...)</span>
+            <span>{{ selectedEndpointProbe()?.name }}</span>
+          </div>
+
+          @if (streamingReasoning()) {
+            <details class="thinking-details" open>
+              <summary>Thinking...</summary>
+              <div class="thinking-body">{{ streamingReasoning() }}</div>
+            </details>
+          }
+
+          @if (streamingContent()) {
+            @if (renderMarkdown()) {
+              <div class="vb-markdown" [innerHTML]="streamingContent() | markdown"></div>
+            } @else {
+              <div class="message-content">{{ streamingContent() }}</div>
+            }
+          } @else if (!streamingReasoning()) {
+            <div class="message-content" style="color: var(--color-text-muted); font-style: italic;">
+              Waiting for first token...
+            </div>
+          }
+        </article>
+      }
+
+      @if (!isStreaming() && messages().length === 0) {
+        <div class="chat-empty">
+          <h3 style="margin-top: 0;">Ready to test your local model</h3>
+          <p style="margin-bottom: 0;">
+            Pick an endpoint (<code>8080</code> or <code>8081</code>) and model above, optionally tweak the system prompt or parameters, and send a message to stream replies with live TPS &amp; TTFT metrics.
+          </p>
+        </div>
+      }
+    </div>
+
+    <!-- Composer -->
+    <div class="chat-composer">
+      <textarea
+        class="vb-input composer-textarea"
+        placeholder="Type a prompt... (Enter to send, Shift+Enter for newline)"
+        [value]="composerText()"
+        [disabled]="isStreaming()"
+        (input)="composerText.set($any($event.target).value)"
+        (keydown)="onComposerKeydown($event)"></textarea>
+
+      @if (isStreaming()) {
+        <button class="vb-btn vb-btn-secondary" style="border-color: var(--color-error); color: var(--color-error);" (click)="stopGeneration()">
+          ■ Stop
+        </button>
+      } @else {
+        <button class="vb-btn vb-btn-primary" [disabled]="!composerText().trim()" (click)="sendMessage()">
+          Send →
+        </button>
+      }
+    </div>
+  </section>
+</div>

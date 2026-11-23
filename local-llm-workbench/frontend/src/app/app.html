@@ -1,0 +1,113 @@
+<div class="vb-flex" style="min-height: 100vh;">
+  <!-- Side Navigation -->
+  <nav class="vb-flex-col vb-gap-4"
+    style="border-right: 1px solid var(--color-border); padding: var(--space-4); background-color: var(--color-surface); transition: width 0.3s ease; overflow: hidden;"
+    [style.width]="isSidebarOpen() ? '250px' : '72px'">
+
+    <div
+      style="padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); display: flex; align-items: center;"
+      [style.justify-content]="isSidebarOpen() ? 'space-between' : 'center'">
+      @if (isSidebarOpen()) {
+      <div
+        style="white-space: nowrap; overflow: hidden; margin-right: var(--space-2); display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);">
+        <img src="logo.png" alt="Logo" style="height: 30px;width: 145px;object-fit: contain;">
+        @if (appInfo()) {
+        <h2 style="margin-bottom: 0; font-size: var(--text-lg);">{{ appInfo()?.name }}</h2>
+        } @else {
+        <h2 style="margin-bottom: 0; font-size: var(--text-lg);">Loading...</h2>
+        }
+      </div>
+      }
+      <button class="vb-btn vb-btn-secondary" style="padding: var(--space-1) var(--space-2); min-width: auto;"
+        (click)="toggleSidebar()">
+        <span style="font-size: 1.2rem;">{{ isSidebarOpen() ? '◀' : '☰' }}</span>
+      </button>
+    </div>
+
+    <div class="vb-flex-col vb-gap-2">
+      <a routerLink="/chat" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>💬</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Chat Tester</span> }
+      </a>
+      <a routerLink="/servers" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>🖥️</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Servers</span> }
+      </a>
+      <a routerLink="/endpoints" routerLinkActive="vb-btn-primary"
+        class="vb-btn vb-btn-secondary" [style.justify-content]="isSidebarOpen() ? 'flex-start' : 'center'"
+        style="white-space: nowrap; overflow: hidden; width: 100%;">
+        <span>📡</span>
+        @if (isSidebarOpen()) { <span style="margin-left: var(--space-2);">Endpoints</span> }
+      </a>
+    </div>
+
+    <!-- Theme Selector pinned to bottom -->
+    <div
+      style="margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--color-border); overflow: hidden; white-space: nowrap;">
+      @if (isSidebarOpen()) {
+      <app-theme-selector></app-theme-selector>
+      } @else {
+      <div style="text-align: center; font-size: 1.2rem; cursor: pointer;" title="Theme (Expand to change)"
+        (click)="toggleSidebar()">
+        ⚙️
+      </div>
+      }
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main style="flex: 1; padding: var(--space-6); overflow-y: auto; display: flex; flex-direction: column;">
+    <header class="vb-mb-6 vb-flex vb-flex-between"
+      style="padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); flex-wrap: wrap; gap: var(--space-4); align-items: center;">
+      <div>
+        @if (appInfo()) {
+        <h1 style="margin-bottom: 0;">{{ appInfo()?.name }}</h1>
+        <p style="color: var(--color-text-muted); margin-bottom: 0;">{{ appInfo()?.subtitle }}</p>
+        } @else {
+        <h1 style="margin-bottom: 0;">Loading...</h1>
+        }
+      </div>
+
+      <!-- Live Endpoint Status Pills -->
+      <div class="vb-flex vb-gap-2" style="align-items: center; flex-wrap: wrap;">
+        @for (ep of endpointStatusService.statuses(); track ep.endpointId) {
+        <div
+          style="display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid var(--color-border); background-color: var(--color-surface); font-size: var(--text-sm);"
+          [title]="ep.activeModel ? ep.baseUrl + ' — ' + ep.activeModel : ep.baseUrl + (ep.error ? ' (' + ep.error + ')' : '')">
+          <span
+            style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"
+            [style.background-color]="ep.status === 'online' ? '#22c55e' : ep.status === 'loading' ? '#f59e0b' : '#ef4444'">
+          </span>
+          <span style="font-weight: 500;">{{ ep.name }}</span>
+          @if (ep.status === 'online' && ep.latencyMs !== null) {
+          <span style="color: var(--color-text-muted); font-size: 0.75rem;">{{ ep.latencyMs }}ms</span>
+          } @else {
+          <span style="color: var(--color-text-muted); font-size: 0.75rem;">{{ ep.status }}</span>
+          }
+        </div>
+        }
+        <button class="vb-btn vb-btn-secondary"
+          style="padding: 0.3rem 0.65rem; font-size: var(--text-sm);"
+          [disabled]="endpointStatusService.isLoading()"
+          (click)="refreshEndpoints()">
+          {{ endpointStatusService.isLoading() ? 'Probing...' : '↻ Refresh' }}
+        </button>
+      </div>
+    </header>
+
+    <div style="flex: 1;">
+      <router-outlet></router-outlet>
+    </div>
+
+    @if (appInfo()) {
+    <footer class="vb-mt-6"
+      style="text-align: center; color: var(--color-text-muted); padding-top: var(--space-4); border-top: 1px solid var(--color-border); font-size: var(--text-sm);">
+      <p>Powered by {{ appInfo()?.name }} / Vibe Architecture</p>
+    </footer>
+    }
+  </main>
+</div>
